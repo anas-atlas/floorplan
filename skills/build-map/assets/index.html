@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build maps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Two views: the board (every map as a card, one column per stage) and one map as a lean console
+   (Inbox, Grill or Quiz, Progress). The console shows only what the owner has to act on; details open on click. */
+:root {
+  --bg: #f6f7f6; --panel: #ffffff; --fg: #1d2421; --muted: #66716c; --faint: #8f9994; --line: #d6dcd9; --accent: #2f6fb8;
+  --s-none: #b4bcb8; --s-written: #8a6fd1; --s-committed: #2f6fb8; --s-sandbox: #c98a1b; --s-prod: #2f8a55;
+  --ok: #2f8a55; --bad: #c0392b; --warn: #c98a1b; --ok-text: #25703f; --warn-text: #885800; --accent-ink: #ffffff;
+  --hover: color-mix(in srgb, var(--fg) 6%, transparent);
+  --f-body: "Atkinson Hyperlegible", system-ui, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141917; --panel: #1c2320; --fg: #e3e9e6; --muted: #97a39e; --faint: #6f7b76; --line: #2f3833; --accent: #6aa2e6;
+  --s-none: #5d6863; --s-written: #a993e6; --s-committed: #6aa2e6; --s-sandbox: #e0a63b; --s-prod: #5cbd84;
+  --ok: #5cbd84; --bad: #ef6f5f; --warn: #e0a63b; --ok-text: #5cbd84; --warn-text: #e0a63b; --accent-ink: #10231a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141917; --panel: #1c2320; --fg: #e3e9e6; --muted: #97a39e; --faint: #6f7b76; --line: #2f3833; --accent: #6aa2e6;
+  --s-none: #5d6863; --s-written: #a993e6; --s-committed: #6aa2e6; --s-sandbox: #e0a63b; --s-prod: #5cbd84;
+  --ok: #5cbd84; --bad: #ef6f5f; --warn: #e0a63b; --ok-text: #5cbd84; --warn-text: #e0a63b; --accent-ink: #10231a; color-scheme: dark }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 var(--f-body); font-variant-numeric: tabular-nums; }
+.wrap { max-width: 900px; margin: 0 auto; padding-inline: 16px; padding-block: 18px 40px; display: grid; gap: 12px; }
+::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1 { font-size: 20px; margin: 0; text-wrap: balance; }
+.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.hint { margin: 0; font-size: 13px; color: var(--muted); }
+.hint.bad { color: var(--bad); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.btn { font: 600 13px var(--f-body); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; background: var(--panel); min-height: 32px; }
+.chip { font: 600 12px var(--f-mono); color: var(--c); white-space: nowrap; }
+.chip.warn { color: var(--warn-text); }
+.who { font: 12px var(--f-mono); color: var(--muted); }
+.empty { font-size: 15px; color: var(--muted); }
+.bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--c); }
+
+/* console: header and stage dots */
+.head { display: flex; align-items: center; gap: 10px; }
+.back { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--muted); }
+.back:hover { background: var(--hover); color: var(--fg); }
+.head h1 { flex: 1; min-width: 0; }
+.dots { display: flex; align-items: center; gap: 5px; flex: none; }
+.dots b { font: 400 13px var(--f-body); color: var(--muted); margin-right: 4px; }
+.dots i { width: 7px; height: 7px; border-radius: 4px; background: var(--line); }
+.dots i.done { background: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.dots i.now { width: 18px; background: var(--accent); }
+/* console: the build steps; click one to move the map there */
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: -4px; }
+.step { font-size: 13px; padding: 3px 10px; border-radius: 12px; color: var(--faint); min-height: 26px; }
+.step:hover { background: var(--hover); color: var(--fg); }
+.step.done { color: color-mix(in srgb, var(--accent) 70%, var(--muted)); }
+.step[aria-current="step"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.step.was { box-shadow: inset 0 0 0 1px var(--accent); }
+.steps .who { align-self: center; margin-left: 6px; }
+/* the step you are looking at (not the current one): a thin pill ring, same size as the others */
+.step.sel { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent); }
+/* keep the pill shape and size when focused; the global focus rule would square it */
+.step:focus-visible { border-radius: 12px; outline-offset: 2px; }
+.step { border: 0; line-height: 20px; box-sizing: border-box; }
+/* console: the view of one step */
+.viewing { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); padding: 5px 6px 5px 12px; min-height: 44px; box-sizing: border-box; border: 1px dashed var(--line); border-radius: 8px; }
+.viewing span { flex: 1; min-width: 160px; }
+/* fixed slots, so two cards are as wide as three: sizes stay the same from step to step */
+.met { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.m { background: color-mix(in srgb, var(--line) 35%, var(--bg)); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--muted); }
+.m b { display: block; font-size: 22px; color: var(--fg); font-weight: 700; }
+.m.bad b { color: var(--bad); } .m.ok b { color: var(--ok-text); }
+.lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; align-items: start; }
+.lanec { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; align-content: start; background: var(--panel); }
+.lanec { min-width: 0; }
+.lanec h3 { margin: 0; font-size: 15px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; }
+.lanec .line .tt { overflow-wrap: anywhere; }
+.sti { display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; color: var(--c); }
+.sti .i { width: 16px; height: 16px; }
+.lanec h3 span { font-weight: 400; font-size: 13px; color: var(--muted); }
+/* one row size for every list in every step: 44px high, 15px title, 13px value */
+.chk { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 44px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 15px; }
+.chk.bad { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.chk .pip { margin: 0 3px; }
+.chk .i, .wait .i, .li-h .i, .fold .i, .it-h .pen .i { width: 16px; height: 16px; }
+.chk .sub { display: block; font-size: 13px; color: var(--muted); }
+.pane > p:not([class]) { margin: 0; font-size: 15px; color: var(--muted); }
+.chk .i { color: var(--faint); } .chk.in .i { color: var(--ok); } .chk.sent .i { color: var(--accent); }
+.chk .tt { flex: 1; min-width: 0; } .chk .val { font-size: 13px; color: var(--muted); }
+
+.pane { display: grid; gap: 10px; }
+/* console: tabs */
+.tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--line); }
+.tab { padding: 8px 0; margin-bottom: -1px; color: var(--muted); border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 6px; }
+.tab:hover { color: var(--fg); }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); font-weight: 700; }
+.badge { font: 600 12px var(--f-mono); padding: 0 6px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+
+/* console: items. An item is one line; its body opens on click. */
+.list { display: grid; gap: 8px; }
+.it { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.it.dragging { opacity: .4; }
+.it-h { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 6px; min-height: 42px; box-sizing: border-box; font-size: 15px; }
+.grip { color: var(--faint); opacity: .35; cursor: grab; display: inline-flex; }
+.it:hover .grip { opacity: 1; }
+.k { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--c); }
+.it-h .tt { flex: 1; min-width: 0; }
+.it-b { padding: 0 12px 12px 42px; display: grid; gap: 6px; font-size: 15px; color: var(--muted); }
+.it-b p { margin: 0; }
+.it-b .q { color: var(--fg); }
+.acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+.ib { width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: 6px; color: var(--muted); }
+.ib:hover { background: var(--hover); color: var(--fg); }
+.ib.rec { color: var(--accent); }
+.tb { height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-size: 15px; margin-inline: 2px; }
+.tb:hover { border-color: var(--muted); }
+.tb.rec { border-color: var(--accent); color: var(--accent); }
+.nt { flex: 1; min-width: 120px; height: 32px; box-sizing: border-box; font: inherit; font-size: 15px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); margin-left: 4px; }
+.nt::placeholder { color: var(--faint); }
+
+/* console: light rows for things already handled (sent, decided) and progress lines */
+.fold { display: flex; align-items: center; gap: 8px; padding: 8px 12px; min-height: 40px; box-sizing: border-box; font-size: 15px; color: var(--faint); border-radius: 6px; }
+.fold:hover { color: var(--muted); }
+.fold .i { width: 14px; height: 14px; transition: transform .15s; }
+.fold[aria-expanded="false"] .i { transform: rotate(-90deg); }
+.fold.ghost { display: none; }
+.dragging-item .fold.ghost { display: flex; }
+.fold.drop { outline: 2px dashed var(--accent); outline-offset: 2px; color: var(--accent); }
+.lite { display: grid; }
+.li-h { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 12px; min-height: 40px; box-sizing: border-box; border-radius: 8px; font-size: 15px; color: var(--muted); }
+.li-h:hover { background: var(--hover); }
+.li-h .i { width: 15px; height: 15px; color: var(--faint); }
+.li-h .tt { flex: 1; min-width: 0; }
+.li-h .val { color: var(--faint); font-size: 13px; text-align: right; }
+.li-b { padding: 2px 12px 10px 37px; display: grid; gap: 4px; font-size: 15px; color: var(--faint); }
+.li-b p { margin: 0; }
+.li-b strong { color: var(--muted); font-weight: 700; }
+.li-b .tb { justify-self: start; height: 28px; margin: 2px 0 0; }
+.compose { display: flex; gap: 4px; align-items: center; }
+.compose .nt { margin: 0; background: transparent; }
+
+/* console: grill context and progress */
+.ctx { background: color-mix(in srgb, var(--line) 35%, var(--bg)); border-radius: 8px; padding: 10px 12px; font-size: 15px; color: var(--muted); display: grid; gap: 4px; }
+.ctx p { margin: 0; }
+.prog { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.prog .bar { flex: 1; height: 6px; }
+.line { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 15px; color: var(--muted); }
+.line > span:not(.tt) { font-size: 13px; white-space: nowrap; }
+.line .tt { flex: 1; min-width: 0; color: var(--fg); }
+.line.bad .tt { color: var(--bad); }
+.pip { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--s-none); flex: none; box-sizing: border-box; }
+.pip.on { background: var(--c); border-color: var(--c); }
+.grp { font-size: 12px; color: var(--faint); margin: 6px 0 0; }
+/* console: what the build is blocked on, one quiet line above the tabs; click to read it all */
+.wait { width: 100%; display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--warn-text); padding: 10px 12px; min-height: 44px; border-radius: 8px; box-sizing: border-box; background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
+.wait .i { width: 15px; height: 15px; }
+.sec { font-size: 12px; color: var(--faint); margin: 6px 0 -4px; letter-spacing: .02em; }
+.wait .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.wait[aria-expanded="true"] .tt { white-space: normal; }
+.wait:hover { background: color-mix(in srgb, var(--warn) 18%, var(--panel)); }
+
+/* console: drafts wait for Send; the bar sticks to the bottom while any exist */
+.it.draft { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.it-h .val { font-size: 13px; color: var(--accent); max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.it-h .pen { color: var(--faint); }
+.tb.picked, .ib.picked { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); color: var(--accent); }
+.dn { display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 12px; min-height: 40px; font-size: 15px; }
+.dn .tt { flex: 1; min-width: 0; }
+.sendbar { position: sticky; bottom: 12px; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; box-shadow: 0 6px 18px color-mix(in srgb, var(--fg) 12%, transparent); }
+.sendbar .tt { flex: 1; font-weight: 700; font-size: 15px; }
+.sendbar .go { width: 36px; height: 36px; display: inline-grid; place-items: center; border-radius: 8px; background: var(--accent); color: var(--accent-ink); }
+.sendbar .go:hover { background: color-mix(in srgb, var(--accent) 85%, var(--fg)); }
+
+/* console: delete, confirmed in place */
+.head .ib { flex: none; }
+.ib.danger:hover { color: var(--bad); }
+.confirm { border: 1px solid var(--bad); border-radius: 8px; padding: 12px; display: grid; gap: 8px; font-size: 15px; background: var(--panel); }
+.confirm p { margin: 0; color: var(--muted); }
+.confirm b { font-size: 16px; }
+.confirm label { display: flex; align-items: center; gap: 8px; }
+.confirm .row { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.tb.bad { border-color: var(--bad); color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { .fold .i { transition: none; } .col { transition: none; } }
+
+/* board: all maps as one column per stage; drag a card (or Alt+arrow) to change its stage */
+.wrap.wide { max-width: 1320px; }
+.board { display: grid; grid-template-columns: repeat(6, minmax(190px, 1fr)); gap: 10px; align-items: start; overflow-x: auto; padding-bottom: 6px; }
+.col { background: color-mix(in srgb, var(--line) 35%, var(--bg)); border: 1px solid transparent; border-radius: 8px; padding: 8px; display: grid; gap: 6px; align-content: start; min-height: 160px; transition: border-color .12s, background .12s; }
+.col.over { border-color: var(--accent); border-style: dashed; background: color-mix(in srgb, var(--accent) 9%, var(--bg)); }
+.col h2 { margin: 0 2px 2px; display: flex; justify-content: space-between; align-items: center; font: 700 12px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.col h2 .n { font: 600 12px var(--f-mono); letter-spacing: 0; }
+.card { display: grid; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; color: inherit; text-decoration: none; cursor: grab; }
+.card:hover { border-color: var(--accent); }
+.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card.dragging { opacity: .45; }
+.card.pending { opacity: .6; }
+.card b { font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.card .bars { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.card .bar { height: 5px; }
+.card .flags { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.col.archive .card { background: transparent; border-style: dashed; }
+.col.archive .card b { font-weight: 400; color: var(--muted); }
+.col .empty { font-size: 13px; padding: 10px 4px; text-align: center; }
+/* a column folds to a thin strip: click its title to fold, click the strip to open; remembered per browser */
+.colh { width: 100%; display: flex; align-items: center; gap: 4px; border-radius: 4px; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+.colh:hover { color: var(--fg); }
+.colh .i { width: 14px; height: 14px; transition: transform .12s; }
+.colh .t { flex: 1; text-align: left; }
+.col.folded { padding: 8px 0; justify-items: center; }
+.col.folded h2 { margin: 0; }
+.col.folded .colh { writing-mode: vertical-rl; width: auto; min-height: 144px; padding: 2px 0; gap: 8px; }
+.col.folded .colh .i { transform: rotate(-90deg); }
+.col.folded .colh .t { flex: none; }
+@media (prefers-reduced-motion: reduce) { .colh .i { transition: none; } }
+/* build diagram: a light component diagram drawn from the map. One column per actor, modules by depth,
+   the data model in a dashed box, colour by build state, L-shaped arrows that never cross a box. */
+.diagram { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 8px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; height: auto; }
+.diagram .box { fill: color-mix(in srgb, var(--c) 12%, var(--panel)); stroke: color-mix(in srgb, var(--c) 75%, var(--fg)); stroke-width: .75; }
+.diagram .actor { fill: var(--panel); stroke: var(--muted); stroke-width: .75; }
+.diagram .ttl { font: 600 14px var(--f-body); fill: var(--fg); }
+.diagram .sub { font: 12px var(--f-body); fill: var(--muted); }
+.diagram .small .ttl { font: 12px var(--f-body); }
+.diagram .dm { fill: none; stroke: var(--muted); stroke-width: .75; stroke-dasharray: 4 4; }
+.diagram .dml { font: 600 13px var(--f-body); fill: var(--muted); }
+.diagram .arr { fill: none; stroke: var(--muted); stroke-width: 1; stroke-linejoin: round; }
+.diagram .node { cursor: pointer; }
+.diagram .node:hover .box, .diagram .node.on .box { stroke-width: 1.75; }
+.diagram svg.focus .arr { opacity: .12; }
+.diagram svg.focus .arr.hl { opacity: 1; stroke: var(--accent); stroke-width: 1.5; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); padding: 2px 4px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; background: var(--c); vertical-align: -1px; }
+.mdet { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 15px; }
+.mdet .hd { display: flex; align-items: center; gap: 10px; } .mdet .hd b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mdet p { margin: 0; font-size: 13px; color: var(--muted); }
+/* any board not on the real port says so, so nobody answers on a copy by mistake */
+.copytag { position: sticky; top: 0; z-index: 5; text-align: center; font-size: 13px; padding: 6px 16px; background: color-mix(in srgb, var(--warn) 22%, var(--bg)); color: var(--warn-text); }
+
+/* ---------- responsive ----------
+   Grid tracks may shrink below their content, so one long line can never widen the page. */
+.wrap, .pane, .list { grid-template-columns: minmax(0, 1fr); }
+.wait .tt { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.wait[aria-expanded="true"] .tt { -webkit-line-clamp: unset; display: block; }
+.copytag .short { display: none; }
+.ib .ol { display: none; }
+
+/* tablet and small laptops: the board wraps to three columns; folded columns become one header line */
+@media (max-width: 1100px) {
+  .board { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; overflow-x: visible; }
+  .col { min-height: 0; }
+  .col.folded { padding: 8px; justify-items: stretch; }
+  .col.folded .colh { writing-mode: horizontal-tb; min-height: 0; width: 100%; padding: 0; gap: 4px; }
+  .col.folded .colh .t { flex: 1; }
+}
+/* phones: one column of everything, steps scroll sideways, answers stack full width */
+@media (max-width: 640px) {
+  .board { grid-template-columns: minmax(0, 1fr) !important; }
+  .copytag .long { display: none; } .copytag .short { display: inline; }
+  .steps { flex-wrap: nowrap; overflow-x: auto; margin-inline: -16px; padding: 2px 16px; scrollbar-width: none; scroll-snap-type: x proximity; }
+  .steps::-webkit-scrollbar { display: none; }
+  .step { flex: none; scroll-snap-align: center; }
+  .it-b { padding-left: 12px; }
+  .acts .tb { flex: 1 1 100%; margin: 0; text-align: center; }
+  /* touch has no hover title, so icon answers show their word too */
+  .acts .ib[data-act="pick"] { flex: 1 1 100%; width: auto; display: flex; justify-content: center; gap: 8px; border: 1px solid var(--line); background: var(--panel); font-size: 15px; }
+  .acts .ib[data-act="pick"].rec { border-color: var(--accent); }
+  .acts .ib .ol { display: inline; }
+  .acts .nt { flex: 1 1 100%; margin: 4px 0 0; }
+  .met { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .m b { font-size: 20px; }
+  .viewing span { flex-basis: 100%; }
+  .viewing .tb { width: 100%; }
+  .sendbar { bottom: max(12px, env(safe-area-inset-bottom)); }
+  .lanes { grid-template-columns: minmax(0, 1fr); }
+}
+/* touch screens: 44px targets, and 16px inputs so phones do not zoom in on focus */
+@media (pointer: coarse) {
+  .ib, .back { width: 44px; height: 44px; }
+  .tb { min-height: 44px; }
+  .step { min-height: 40px; padding: 8px 14px; }
+  .tab { min-height: 44px; }
+  .nt { height: 44px; font-size: 16px; }
+  .sendbar .go { width: 44px; height: 44px; }
+  .colh { min-height: 40px; }
+  .col .empty { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="copytag" id="copytag" hidden><span class="long">Design copy: answers here never reach the real board (4330)</span><span class="short">Design copy, not the real board</span></div>
+<div class="wrap" id="app"></div>
+<script>
+const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const A = x => Array.isArray(x) ? x : [];
+// Lifecycle steps (console dots) and the board's columns, which group them.
+// Inputs are not a step: the agent can ask for one at any step, so they live in the Inbox.
+const FLOW = ['grill', 'spec', 'build', 'qa', 'review', 'deploy', 'quiz', 'close'];
+const FLOW_NAMES = { grill: 'Grill', spec: 'Spec', plan: 'Grill', build: 'Build', qa: 'QA', review: 'Review', deploy: 'Deploy', quiz: 'Quiz', close: 'Close', complete: 'Complete', archive: 'Archived' };
+const COLS = ['plan', 'build', 'qa', 'deploy', 'complete', 'archive'], COL_NAMES = ['Plan', 'Build', 'QA & test', 'Deploy', 'Complete', 'Archive'];
+const COL_OF = s => ({ grill: 'plan', spec: 'plan', inputs: 'build', plan: 'plan', build: 'build', qa: 'qa', review: 'qa', deploy: 'deploy', quiz: 'deploy', close: 'deploy' })[s] || (COLS.includes(s) ? s : 'plan');
+const COL_START = { plan: 'grill', build: 'build', qa: 'qa', deploy: 'deploy', complete: 'complete', archive: 'archive' };
+const KIND_C = { decision: 'var(--s-written)', input: 'var(--warn)', approve: 'var(--accent)' };
+const CODE_LABEL = { none: 'Not built', written: 'Written', committed: 'Committed' };
+const CODE_C = { none: 'var(--s-none)', written: 'var(--s-written)', committed: 'var(--s-committed)' };
+const RES_C = { pass: 'var(--ok)', fail: 'var(--bad)', open: 'var(--warn)' };
+const ICONS = {
+  check: '<path d="M5 12l5 5L20 7"/>',
+  send: '<path d="M10 14L21 3"/><path d="M21 3l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1L21 3"/>',
+  pause: '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+  link: '<path d="M12 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/><path d="M11 13l9-9"/><path d="M15 4h5v5"/>',
+  x: '<path d="M18 6L6 18M6 6l12 12"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  file: '<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/>',
+  upload: '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/>',
+  eye: '<circle cx="12" cy="12" r="2"/><path d="M21 12c-2.4 4-5.4 6-9 6s-6.6-2-9-6c2.4-4 5.4-6 9-6s6.6 2 9 6"/>',
+  refresh: '<path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  grip: '<circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>',
+  chev: '<path d="M6 9l6 6 6-6"/>',
+  back: '<path d="M5 12h14M5 12l6 6M5 12l6-6"/>',
+  commit: '<circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6"/>',
+  flask: '<path d="M9 3h6M10 9h4M10 3v6l-4.8 10.4A1.1 1.1 0 0 0 6.2 21h11.6a1.1 1.1 0 0 0 1-1.6L14 9V3"/>',
+  rocket: '<path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3-5a9 9 0 0 0 6-8a3 3 0 0 0-3-3a9 9 0 0 0-8 6a6 6 0 0 0-5 3"/><path d="M7 14a6 6 0 0 0-3 6a6 6 0 0 0 6-3"/><circle cx="15" cy="9" r="1"/>',
+  notbuilt: '<circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/>',
+  pen: '<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-4-4L4 16v4"/><path d="M13.5 6.5l4 4"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>',
+  note: '<path d="M8 9h8M8 13h6"/><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z"/>',
+  alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.4 3.9L2.6 17.5a1.8 1.8 0 0 0 1.6 2.7h15.6a1.8 1.8 0 0 0 1.6-2.7L13.6 3.9a1.8 1.8 0 0 0-3.2 0z"/>'
+};
+const icon = n => ICONS[n] ? `<svg viewBox="0 0 24 24" aria-hidden="true" class="i">${ICONS[n]}</svg>` : '';
+const ext = (u, t) => /^https?:\/\//.test(u || '') ? `<a href="${E(u)}" target="_blank" rel="noopener">${E(t)}</a>` : E(t);
+// A map link to a local file opens read-only through the server, which looks the path up in the map itself.
+const linkTo = (l, t) => {
+  const i = A(D.deploy && D.deploy.links).indexOf(l);
+  return /^(\/|~\/)/.test(l[2] || '') && i >= 0 ? `<a href="/doc?map=${encodeURIComponent(slug)}&amp;i=${i}" target="_blank" rel="noopener">${E(t)}</a>` : ext(l[2], t);
+};
+
+// View state is per browser tab; the map itself lives in ~/build-maps/<name>.json.
+const ui = { msg: '', live: false, tab: {}, exp: {}, del: false, view: {}, dsel: {} };
+// Folded board columns are a per-browser convenience; Archive starts folded.
+const FOLD_KEY = 'bm.folded';
+let folded = (() => { try { const v = JSON.parse(localStorage.getItem(FOLD_KEY)); return Array.isArray(v) ? v : ['archive']; } catch (e) { return ['archive']; } })();
+function toggleFold(k) {
+  folded = folded.includes(k) ? folded.filter(x => x !== k) : [...folded, k];
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch (e) { /* storage blocked: fold for this visit only */ }
+  render();
+}
+let slug = '', D = null, maps = null, problem = '';
+const app = document.getElementById('app');
+if (location.port !== '4330') { document.getElementById('copytag').hidden = false; }
+
+async function api(path, init) {
+  const r = await fetch(path, init), j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+async function load() {
+  try {
+    slug = decodeURIComponent((location.hash.match(/^#\/([a-z0-9_-]+)/) || [])[1] || '');
+    problem = '';
+    if (slug) { const j = await api('/api/map/' + slug); D = j.map; if (j.warnings.length) problem = 'This map has problems: ' + j.warnings.join('; '); }
+    else { D = null; maps = (await api('/api/maps')).maps; }
+  } catch (e) { D = null; problem = e.message; }
+  render();
+}
+async function send(op) {
+  ui.msg = '';
+  try { D = (await api(`/api/map/${slug}/op`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ by: 'you', ...op }) })).map; }
+  catch (e) { ui.msg = e.message; }
+  render();
+}
+
+/* ---------- board ---------- */
+function renderList() {
+  const ok = A(maps).filter(m => !m.error), bad = A(maps).filter(m => m.error);
+  const card = m => {
+    const done = m.stage === 'complete';
+    const pc = (n, c) => `<div class="bar"><i style="--c:${c};width:${done ? 100 : m.total ? Math.round(100 * n / m.total) : 0}%"></i></div>`;
+    const flags = [m.forYou && `<span class="badge">${m.forYou} for you</span>`, m.blocked && '<span class="chip" style="--c:var(--bad)">Blocked</span>',
+      m.stage === 'archive' && m.was && `<span class="who">from ${E(FLOW_NAMES[m.was] || m.was)}</span>`].filter(Boolean).join('');
+    return `<a class="card${pending[m.slug] ? ' pending' : ''}" href="#/${E(m.slug)}" draggable="true" data-slug="${E(m.slug)}" data-key="card:${E(m.slug)}" aria-describedby="board-hint">` +
+      `<b>${E(m.feature)}</b>` +
+      (m.total || done ? `<div class="bars" title="${done ? 'Complete' : `${m.committed} of ${m.total} committed, ${m.prod} in prod`}">${pc(m.committed, 'var(--s-committed)')}${pc(m.prod, 'var(--s-prod)')}</div>` : '') +
+      (flags ? `<div class="flags">${flags}</div>` : '') + `</a>`;
+  };
+  const cols = COLS.map((k, i) => {
+    const in_ = ok.filter(m => COL_OF(m.stage) === k);
+    const f = folded.includes(k);
+    return `<section class="col ${k}${f ? ' folded' : ''}" data-col="${k}" aria-label="${COL_NAMES[i]}, ${in_.length} maps">` +
+      `<h2><button class="colh" data-act="col" data-k="${k}" data-key="col:${k}" aria-expanded="${!f}" title="${f ? 'Show' : 'Hide'} cards">${icon('chev')}<span class="t">${COL_NAMES[i]}</span><span class="n">${in_.length}</span></button></h2>` +
+      (f ? '' : in_.length ? in_.map(card).join('') : '<div class="empty">Drop a map here</div>') + `</section>`;
+  }).join('');
+  const errs = bad.map(m => `<p class="hint bad">${E(m.slug)}: ${E(m.error)}</p>`).join('');
+  return `<header><h1>Build maps</h1>${ui.live ? '' : '<p class="hint">Reconnecting</p>'}</header>` +
+    (ok.length || bad.length ? `<p class="sr" id="board-hint">Drag a card to another column to change its stage, or focus it and press Alt with the left or right arrow.</p>` +
+      (ui.msg ? `<p class="hint bad" role="alert">${E(ui.msg)}</p>` : '') + errs + `<div class="board" style="grid-template-columns: ${COLS.map(k => folded.includes(k) ? '36px' : 'minmax(190px, 1fr)').join(' ')}">${cols}</div>`
+      : `<p class="empty">No build maps yet. Create one with <code>bm new my-feature "Feature name"</code></p>`);
+}
+const pending = {};
+async function move(s, col) {
+  const m = A(maps).find(x => x.slug === s); if (!m || COL_OF(m.stage) === col) return;
+  const before = m.stage, stage = COL_START[col]; m.stage = stage; pending[s] = true; ui.msg = ''; render();
+  try { await api(`/api/map/${s}/op`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'stage', stage, by: 'you' }) }); }
+  catch (e) { m.stage = before; ui.msg = `Could not move ${m.feature}: ${e.message}`; }
+  delete pending[s]; render();
+  const el = app.querySelector(`.card[data-slug="${s}"]`); if (el) el.focus({ preventScroll: true });
+}
+
+/* ---------- console ---------- */
+// Every owner-facing item is a decision record: open (waiting on you), sent (you answered, the agent has not applied it yet) or decided.
+const DEFAULT_OPTS = { approve: [{ l: 'Approve', i: 'check', rec: true }, { l: 'Hold', i: 'pause' }], input: [{ l: 'Done', i: 'check', rec: true }], decision: [] };
+const items = () => A(D.plan && D.plan.decisions).map((d, i) => ({ ...d, i, kind: d.kind || 'decision' }))
+  .sort((a, b) => (a.ord ?? 1e6 + a.i) - (b.ord ?? 1e6 + b.i));
+const stateOf = d => d.done ? 'decided' : d.a && d.aBy === 'you' ? 'sent' : 'open';
+// Older items have no short title: use the first clause, cut to one line. The full text shows when the item opens.
+const title = d => {
+  if (d.short) return d.short;
+  const s = String(d.t).split(/(?<=[.?!:])\s/)[0].replace(/:$/, '');
+  return s.length > 64 ? s.slice(0, 62).replace(/\s+\S*$/, '') + '…' : s;
+};
+
+const draftOf = i => (D.draft && D.draft.items || {})[i];
+function openRow(d) {
+  const k = 'd' + d.i, open = !!ui.exp[k], opts = A(d.opts).length ? d.opts : DEFAULT_OPTS[d.kind] || [], dr = draftOf(d.i);
+  const on = o => dr && !dr.tuck && dr.a === o.l ? ' picked" aria-pressed="true' : '';
+  const btn = (o, oi) => ICONS[o.i]
+    ? `<button type="button" class="ib${o.rec ? ' rec' : ''}${on(o)}" data-act="pick" data-i="${d.i}" data-o="${oi}" data-key="pick:${d.i}:${oi}" title="${E(o.l)}" aria-label="${E(o.l)}">${icon(o.i)}<span class="ol">${E(o.l)}</span></button>`
+    : `<button type="button" class="tb${o.rec ? ' rec' : ''}${on(o)}" data-act="pick" data-i="${d.i}" data-o="${oi}" data-key="pick:${d.i}:${oi}">${E(o.l)}</button>`;
+  const body = open ? `<div class="it-b">${title(d) !== d.t ? `<p class="q">${E(d.t)}</p>` : ''}${d.ctx ? `<p>${E(d.ctx)}</p>` : ''}` +
+    `<form class="acts" data-i="${d.i}">${opts.map(btn).join('')}` +
+    `<label class="sr" for="nt-${d.i}">${opts.length ? 'Note' : 'Your answer'}</label><input class="nt" id="nt-${d.i}" maxlength="500" autocomplete="off" placeholder="${opts.length ? 'Note' : 'Your answer'}"${dr && (opts.length ? dr.note : !dr.tuck && dr.a) ? ` value="${E(opts.length ? dr.note : dr.a)}"` : ''}>` +
+    (opts.length ? '' : `<button type="submit" class="ib rec" title="Save" aria-label="Save">${icon('check')}</button>`) +
+    (dr ? `<button type="button" class="ib" data-act="unpick" data-i="${d.i}" data-key="unpick:${d.i}" title="Clear your draft" aria-label="Clear your draft">${icon('x')}</button>` : '') + `</form></div>` : '';
+  const val = dr ? `<span class="val">${E(dr.tuck ? 'Set aside' : dr.a)}${dr.note ? ', note' : ''}</span><span class="pen" title="Not sent yet">${icon('pen')}</span>` : '';
+  return `<div class="it${dr ? ' draft' : ''}" draggable="${!open}" data-i="${d.i}"><button class="it-h" data-act="exp" data-k="${k}" data-key="exp:${k}" aria-expanded="${open}">` +
+    `<span class="grip" title="Drag to reorder">${icon('grip')}</span><i class="k" style="--c:${KIND_C[d.kind]}"></i><span class="tt">${E(title(d))}</span>${val}</button>${body}</div>`;
+}
+// A light row: one muted line, details on click.
+function liteRow(k, ic, text, val, body) {
+  const open = !!ui.exp[k];
+  return `<div class="lite"><button class="li-h" data-act="exp" data-k="${k}" data-key="exp:${k}" aria-expanded="${open}">${icon(ic)}<span class="tt">${text}</span>${val ? `<span class="val">${val}</span>` : ''}</button>` +
+    (open && body ? `<div class="li-b">${body}</div>` : '') + `</div>`;
+}
+function fold(k, label, rows, drop, count) {
+  // With nothing in it, the Decided line only shows while an item is dragged, as the place to set it aside.
+  if (!rows.length) return drop ? `<div class="fold ghost" data-drop="tuck">${icon('chev')}${E(label)}</div>` : '';
+  const open = !!ui.exp[k];
+  return `<button class="fold" data-act="exp" data-k="${k}" data-key="exp:${k}" aria-expanded="${open}"${drop ? ' data-drop="tuck"' : ''}>${icon('chev')}${E(label)} ${E(count ?? rows.length)}</button>` + (open ? rows.join('') : '');
+}
+const answerBody = d => (title(d) !== d.t ? `<p>${E(d.t)}</p>` : '') +
+  `<p><strong>${d.tucked ? 'Set aside' : E(d.a || 'Done')}</strong></p>${d.note ? `<p>${E(d.note)}</p>` : ''}`;
+const sentRow = d => liteRow('s' + d.i, 'clock', E(title(d)), '', answerBody(d) + `<button class="tb" data-act="undo" data-i="${d.i}" data-key="undo:${d.i}">Change</button>`);
+const decidedRow = d => liteRow('x' + d.i, 'check', E(title(d)), '', answerBody(d));
+
+// Every input the agent asked for, at any step, with whether it is in yet.
+function inputsFold(mine) {
+  const ins = mine.filter(d => d.kind === 'input'); if (!ins.length) return '';
+  const got = ins.filter(d => stateOf(d) === 'decided').length;
+  return fold('fold:inputs', 'Inputs', ins.map(d => { const st = stateOf(d);
+    return `<div class="chk${st === 'decided' ? ' in' : st === 'sent' ? ' sent' : ''}">${icon(st === 'decided' ? 'check' : 'clock')}<span class="tt">${E(title(d))}</span><span class="val">${st === 'decided' ? 'In' : st === 'sent' ? 'Sent, agent checking' : 'Needed'}</span></div>`; }), false, `${got} of ${ins.length} in`);
+}
+function itemsTab(mine, grill) {
+  const open = mine.filter(d => stateOf(d) === 'open'), sent = mine.filter(d => stateOf(d) === 'sent'), done = mine.filter(d => stateOf(d) === 'decided');
+  const notes = grill ? [] : A(D.now).map((n, i) => ({ ...n, i })).filter(n => n.by === 'you');
+  let h = '';
+  if (grill) {
+    const links = A(D.deploy && D.deploy.links).filter(l => /source/i.test(l[0]));
+    if (D.plan && D.plan.scope) h += `<div class="ctx"><p>${E(D.plan.scope)}</p>${links.map(l => `<p>${linkTo(l, l[1] || l[0])}</p>`).join('')}</div>`;
+    const n = mine.length, nd = done.length;
+    if (n) h += `<div class="prog"><div class="bar"><i style="--c:var(--accent);width:${Math.round(100 * nd / n)}%"></i></div>${nd} of ${n} decided</div>`;
+  }
+  const dnotes = grill ? [] : A(D.draft && D.draft.notes).map((t, i) => `<div class="it draft dn"><span class="pen">${icon('note')}</span><span class="tt">${E(t)}</span>` +
+    `<button type="button" class="ib" data-act="dropnote" data-n="${i}" data-key="dropnote:${i}" title="Remove note" aria-label="Remove note">${icon('x')}</button></div>`);
+  h += open.length ? `<div class="list" data-list="${grill ? 'grill' : 'inbox'}">${open.map(openRow).join('')}</div>`
+    : dnotes.length ? '' : `<p class="empty">${grill ? 'No grill questions open.' : 'Nothing needs you right now.'}</p>`;
+  if (dnotes.length) h += `<div class="list">${dnotes.join('')}</div>`;
+  const waits = grill ? '' : waitingLines();
+  if (waits) h = `<p class="sec">Waiting on</p><div class="list">${waits}</div>` + (open.length ? '<p class="sec">For you</p>' : '') + h;
+  if (!grill) h += inputsFold(mine);
+  h += fold(grill ? 'fold:gsent' : 'fold:sent', 'Sent', [...sent.map(sentRow), ...notes.map(n => liteRow('n' + n.i, 'clock', E(n.t), '', ''))]);
+  h += fold(grill ? 'fold:gdone' : 'fold:done', 'Decided', done.map(decidedRow), true);
+  if (!grill) h += `<form class="compose" id="noteform"><label class="sr" for="note">Note for the agent</label><input class="nt" id="note" maxlength="300" autocomplete="off" placeholder="Note for the agent"><button type="submit" class="ib" title="Add note" aria-label="Add note">${icon('check')}</button></form>`;
+  return h;
+}
+
+// Every step has its own view. Inbox is always there; the second tab is the step you are looking at,
+// which is the map's current step unless you clicked another one in the step bar.
+const STEP_LIST = [...FLOW, 'complete'];
+const curStep = () => { const s = D.stage === 'archive' ? D.was : D.stage; return s === 'plan' ? 'grill' : s === 'inputs' ? 'build' : STEP_LIST.includes(s) ? s : 'grill'; };
+function renderMap() {
+  const all = items(), cur = curStep(), view = STEP_LIST.includes(ui.view[slug]) ? ui.view[slug] : cur;
+  // While grilling, grill questions are answered in the Grill view; after it, any still open come to the Inbox.
+  const inbox = all.filter(d => !d.grill || cur !== 'grill'), nInbox = inbox.filter(d => stateOf(d) === 'open').length;
+  const nStep = view === 'grill' && cur === 'grill' ? all.filter(d => d.grill && stateOf(d) === 'open').length : 0;
+  const tabs = [['inbox', 'Inbox', nInbox], ['step', FLOW_NAMES[view], nStep]];
+  let tab = ui.tab[slug];
+  // Pick a sensible tab on arrival, then stay on it: answering the last item must not jump you elsewhere.
+  if (!tabs.some(t => t[0] === tab)) tab = ui.tab[slug] = nInbox ? 'inbox' : 'step';
+  const body = tab === 'inbox' ? itemsTab(inbox, false) : stepView(view, cur, all);
+  return `<div class="head"><a class="back" href="#/" title="All maps" aria-label="All maps">${icon('back')}</a><h1>${E(D.feature)}</h1>` +
+    `<button type="button" class="ib danger" data-act="del" data-key="del" title="Delete this map" aria-label="Delete this map" aria-expanded="${ui.del}">${icon('trash')}</button></div>` +
+    stepBar(cur, view) + (ui.del ? confirmDelete() : '') +
+    (problem || ui.msg ? `<p class="hint bad" role="alert">${E(problem || ui.msg)}</p>` : '') +
+    `<div class="tabs" role="tablist">` + tabs.map(([k, l, n]) => `<button class="tab" role="tab" data-act="tab" data-k="${k}" data-key="tab:${k}" aria-selected="${tab === k}">${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('') + `</div>` +
+    `<div class="pane" role="tabpanel">${body}</div>` + sendBar();
+}
+// Clicking a step shows its view; moving the map is a separate button inside that view.
+function stepBar(cur, view) {
+  const ci = STEP_LIST.indexOf(cur), arch = D.stage === 'archive';
+  return `<nav class="steps" aria-label="Build steps">` + STEP_LIST.map((k, i) => {
+    const now = k === cur && !arch, cls = (i < ci ? ' done' : '') + (k === view && !now ? ' sel' : '') + (arch && k === cur ? ' was' : '');
+    return `<button type="button" class="step${cls}" data-act="view" data-k="${k}" data-key="view:${k}"${now ? ' aria-current="step"' : ''} title="Show ${FLOW_NAMES[k]}">${FLOW_NAMES[k]}</button>`;
+  }).join('') + (arch ? '<span class="who">Archived</span>' : '') + `</nav>`;
+}
+
+const mods = () => A(D.layers).flatMap(l => A(l.mods).map(m => ({ ...m, layer: l.name })));
+const resLine = ([s, r, w]) => `<div class="chk${r === 'fail' ? ' bad' : ''}"><i class="pip on" style="--c:${RES_C[r]}"></i><span class="tt">${E(s)}${w ? `<span class="sub">${E(w)}</span>` : ''}</span><span class="val">${r === 'pass' ? 'Pass' : r === 'fail' ? 'Fail' : 'Open'}</span></div>`;
+const metric = (label, val, cls) => `<div class="m${cls ? ' ' + cls : ''}">${E(label)}<b>${E(val)}</b></div>`;
+const linksRow = () => { const ls = A(D.deploy && D.deploy.links); return ls.length ? liteRow('v:links', 'link', 'Links', String(ls.length), ls.map(l => `<p>${E(l[0])}: ${linkTo(l, l[1] || l[0])}</p>`).join('')) : ''; };
+// Items and agent lines an agent tagged with this step (bm decision-add --step, bm now-add --step).
+function tagged(step, all) {
+  const ds = all.filter(d => d.step === step), ns = A(D.now).filter(n => n.step === step && n.by !== 'you');
+  return ds.map(d => { const s = stateOf(d); return `<div class="chk${s === 'decided' ? ' in' : s === 'sent' ? ' sent' : ''}">${icon(s === 'decided' ? 'check' : s === 'sent' ? 'clock' : 'alert')}<span class="tt">${E(title(d))}</span><span class="val">${E(s === 'open' ? 'In your Inbox' : d.tucked ? 'Set aside' : d.a || 'Done')}</span></div>`; }).join('') +
+    ns.map(n => `<div class="chk">${icon(n.blocked ? 'clock' : 'refresh')}<span class="tt">${E(n.t)}</span>${n.who ? `<span class="val">${E(n.who)}</span>` : ''}</div>`).join('');
+}
+function stepView(view, cur, all) {
+  const vi = STEP_LIST.indexOf(view), ci = STEP_LIST.indexOf(cur), arch = D.stage === 'archive';
+  let h = view !== cur || arch ? `<div class="viewing"><span>${arch ? `The map is archived (it was at ${FLOW_NAMES[cur]}).` : `The map is at ${FLOW_NAMES[cur]}.`}</span>` +
+    `<button type="button" class="tb" data-act="move" data-k="${view}" data-key="move:${view}">Move map to ${FLOW_NAMES[view]}</button></div>` : '';
+  const body = (VIEWS[view] || (() => ''))(all), tags = tagged(view, all);
+  if (!body && !tags) h += `<p class="empty">${vi > ci ? 'Not started. This view fills in when the build gets here.' : 'Nothing was recorded for this step.'}</p>`;
+  return h + body + (tags ? `<div class="list">${tags}</div>` : '') + (view === 'grill' ? '' : linksRow());
+}
+// The diagram: a module's state is its furthest point (prod, sandbox, committed, written, not built).
+const STATE = m => m.deployed === 'prod' ? 'prod' : m.deployed === 'sandbox' ? 'sandbox' : m.code;
+const STATE_C = { none: 'var(--s-none)', written: 'var(--s-written)', committed: 'var(--s-committed)', sandbox: 'var(--s-sandbox)', prod: 'var(--s-prod)' };
+const STATE_I = { none: 'notbuilt', written: 'pen', committed: 'commit', sandbox: 'flask', prod: 'rocket' };
+const stateIcon = m => { const s = STATE(m); return `<span class="sti" style="--c:${STATE_C[s]}" role="img" aria-label="${STATE_L[s]}" title="${STATE_L[s]}">${icon(STATE_I[s])}</span>`; };
+const STATE_L = { none: 'Not built', written: 'Written', committed: 'Committed', sandbox: 'Sandbox', prod: 'Production' };
+const subOf = m => m.sub || String(m.what || '').split(/[:;,.(]/)[0].split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
+const isObject = m => /object\b|__c\b|__mdt\b/i.test(m.id);
+function diagramModel() {
+  const mods = A(D.layers).flatMap(l => A(l.mods).map(m => ({ ...m, layer: l.name }))), by = Object.fromEntries(mods.map(m => [m.id, m]));
+  const usesIn = m => A(m.uses).filter(u => by[u] && u !== m.id), users = id => mods.filter(m => usesIn(m).includes(id));
+  // Data model: the objects, plus data and config pieces that use nothing and are only used from inside the box.
+  const box = new Set(mods.filter(m => /data/i.test(m.layer) && isObject(m)).map(m => m.id));
+  for (let grow = true; grow;) { grow = false; for (const m of mods) if (!box.has(m.id) && /data/i.test(m.layer) && !usesIn(m).length && users(m.id).every(u => box.has(u.id))) { box.add(m.id); grow = true; } }
+  // Each actor gets a column; a module joins the column of the first actor that reaches it, at its longest depth below it.
+  const actors = A(D.actors).map((a, i) => ({ id: '@' + i, name: a.name, uses: A(a.uses).filter(u => by[u]) }));
+  const col = {}, rank = {};
+  actors.forEach((a, c) => { const q = [...a.uses.map(u => [u, 1])]; while (q.length) { const [id, r] = q.shift(); if (box.has(id) || (rank[id] >= r && col[id] !== undefined && col[id] !== c) || r > 40) continue; if (col[id] === undefined) col[id] = c; if (!(rank[id] >= r)) { rank[id] = r; usesIn(by[id]).forEach(u => q.push([u, r + 1])); } } });
+  // Capability groups: a module's --group, else its lane. With any group set, every grouped module gets a wrapper,
+  // reached by an actor or not; only modules with neither fall back to the quiet row at the end.
+  const grpOf = m => m.group || m.lane || '', grouped = mods.some(m => !box.has(m.id) && grpOf(m));
+  const other = mods.filter(m => !box.has(m.id) && rank[m.id] === undefined && !(grouped && grpOf(m)));
+  return { mods, by, usesIn, actors, col, rank, box, other, grpOf, grouped };
+}
+function buildDiagram() {
+  const M = diagramModel(), BH = 56, AH = 44, SH = 34, GY = 34, GX = 18, CG = 44, PAD = 16;
+  if (!M.actors.length && !M.mods.some(m => A(m.uses).length)) return `<p class="empty">No actors or links yet. Agents add them with bm actor and --uses.</p>`;
+  const wOf = (t, s, min) => Math.max(min, Math.min(330, Math.round(Math.max(t.length * 7.8, s.length * 6.6) + 28)));
+  const nodes = {}, maxRank = Math.max(0, ...Object.values(M.rank)), colMid = {}, wraps = [];
+  const rowY = r => PAD + (r === 0 ? 0 : AH + GY + (r - 1) * (BH + GY));
+  const cx = id => nodes[id].x + nodes[id].w / 2, aIdx = id => { const i = M.actors.findIndex(a => a.uses.includes(id)); return i < 0 ? 1e3 : i; };
+  // Where a box would like to sit: under the middle of the parents already placed, else in its actor's order.
+  const parentX = id => { const ps = [...M.actors.filter(p => p.uses.includes(id)).map(p => p.id), ...M.mods.filter(p => M.usesIn(p).includes(id)).map(p => p.id)].filter(p => nodes[p]);
+    return ps.length ? ps.reduce((s, p) => s + cx(p), 0) / ps.length : 1e5 + aIdx(id); };
+  let W, y;
+  if (M.grouped) {
+    // Each group is a labelled wrapper. Groups stack in tiers by how they call each other, and the modules in a group
+    // stack in rows the same way, so arrows still run downwards. Wrappers in one line share their header and row grid,
+    // which keeps every row gap clear across the whole line for the arrows to run along.
+    const HEAD = 42, GP = 16, GB = 28, GG = 28, inG = M.mods.filter(m => !M.box.has(m.id) && !M.other.includes(m));
+    const gOf = Object.fromEntries(inG.map(m => [m.id, M.grpOf(m)]));
+    // Longest path layering that ignores back edges, so a loop cannot stack forever.
+    const layer = (items, next) => {
+      const seen = {}, order = [], back = new Set();
+      const visit = k => { seen[k] = 1; for (const n of next(k)) { if (seen[n] === 1) back.add(k + '>' + n); else if (!seen[n]) visit(n); } seen[k] = 2; order.push(k); };
+      items.forEach(k => seen[k] || visit(k));
+      const lv = Object.fromEntries(items.map(k => [k, 0]));
+      order.reverse().forEach(k => next(k).forEach(n => { if (!back.has(k + '>' + n)) lv[n] = Math.max(lv[n], lv[k] + 1); }));
+      return lv;
+    };
+    const keys = [...new Set(inG.map(m => gOf[m.id]))].sort((p, q) => Math.min(...inG.filter(m => gOf[m.id] === p).map(m => aIdx(m.id))) - Math.min(...inG.filter(m => gOf[m.id] === q).map(m => aIdx(m.id))));
+    const tier = layer(keys, k => [...new Set(inG.filter(m => gOf[m.id] === k).flatMap(m => M.usesIn(m).map(u => gOf[u])).filter(g => g !== undefined && g !== k))]);
+    const G = Object.fromEntries(keys.map(k => {
+      const ids = inG.filter(m => gOf[m.id] === k).map(m => m.id), row = layer(ids, id => M.usesIn(M.by[id]).filter(u => gOf[u] === k));
+      const rows = []; ids.forEach(id => (rows[row[id]] = rows[row[id]] || []).push(id));
+      const rowW = rows.map(r => r.reduce((s, id) => s + wOf(id, subOf(M.by[id]), 150) + GX, -GX)), lw = k ? Math.round(k.length * 7.6) : 0;
+      return [k, { k, rows, rowW, lw, w: Math.max(...rowW, lw + 8) + 2 * GP, h: HEAD + rows.length * (BH + GY) - GY + GB }];
+    }));
+    const maxLine = Math.max(1100, ...keys.map(k => G[k].w)), tiers = [...new Set(keys.map(k => tier[k]))].sort((p, q) => p - q);
+    W = 2 * PAD + Math.max(388, ...tiers.map(t => Math.min(maxLine, keys.filter(k => tier[k] === t).reduce((s, k) => s + G[k].w + GG, -GG))));
+    y = PAD + (M.actors.length ? AH + GY : 0);
+    for (const t of tiers) {
+      const bary = k => { const xs = G[k].rows.flat().map(parentX); return Math.min(...xs) >= 1e5 ? Math.min(...xs) : xs.filter(x => x < 1e5).reduce((s, x, _, a) => s + x / a.length, 0); };
+      const gs = keys.filter(k => tier[k] === t).sort((p, q) => bary(p) - bary(q)), lines = [[]];
+      gs.forEach(k => { const l = lines[lines.length - 1]; if (l.length && l.reduce((s, g) => s + G[g].w + GG, 0) + G[k].w > maxLine) lines.push([k]); else l.push(k); });
+      for (const line of lines) {
+        const lh = Math.max(...line.map(k => G[k].h)); let x = (W - line.reduce((s, k) => s + G[k].w + GG, -GG)) / 2;
+        for (const k of line) {
+          const g = G[k]; wraps.push({ x, y, w: g.w, h: lh, label: k, lw: g.lw }); colMid[k] = x + g.w / 2;
+          g.rows.forEach((ids, r) => {
+            let rx = x + (g.w - g.rowW[r]) / 2;
+            ids.sort((p, q) => parentX(p) - parentX(q)).forEach(id => { const w = wOf(id, subOf(M.by[id]), 150); nodes[id] = { x: rx, y: y + HEAD + r * (BH + GY), w, h: BH, m: M.by[id], col: k }; rx += w + GX; });
+          });
+          x += g.w + GG;
+        }
+        y += lh + GG;
+      }
+    }
+    y += GY - GG;
+    // Actors on top, each over the middle of the boxes it enters by, pushed apart when they would overlap.
+    let ax = PAD;
+    M.actors.map(a => { const ts = a.uses.filter(u => nodes[u]); return { a, want: ts.length ? ts.reduce((s, u) => s + cx(u), 0) / ts.length : 1e5 }; }).sort((p, q) => p.want - q.want).forEach(({ a, want }) => {
+      const aw = wOf(a.name, '', 150), x = want >= 1e5 ? ax : Math.max(ax, want - aw / 2);
+      nodes[a.id] = { x, y: PAD, w: aw, h: AH, actor: a, col: a.id }; colMid[a.id] = x + aw / 2; ax = x + aw + GX;
+    });
+    W = Math.max(W, ax - GX + PAD);
+  } else {
+  // Lay out each actor column row by row, children kept under their parents.
+  let x0 = PAD;
+  M.actors.forEach((a, c) => {
+    const rows = []; for (let r = 1; r <= maxRank; r++) rows[r] = M.mods.filter(m => M.col[m.id] === c && M.rank[m.id] === r);
+    const widths = rows.map(rw => rw ? rw.reduce((s, m) => s + wOf(m.id, subOf(m), 150) + GX, -GX) : 0);
+    const aw = wOf(a.name, '', 150), cw = Math.max(aw, ...widths.filter(Boolean));
+    nodes[a.id] = { x: x0 + (cw - aw) / 2, y: rowY(0), w: aw, h: AH, actor: a };
+    for (let r = 1; r <= maxRank; r++) {
+      const rw = rows[r]; if (!rw.length) continue;
+      const parentX = m => { const ps = [...M.actors.filter(p => p.uses.includes(m.id)).map(p => nodes[p.id]), ...M.mods.filter(p => M.usesIn(p).includes(m.id)).map(p => nodes[p.id])].filter(Boolean); return ps.length ? ps.reduce((s, p) => s + p.x + p.w / 2, 0) / ps.length : 1e5; };
+      rw.sort((p, q) => parentX(p) - parentX(q));
+      let x = x0 + (cw - widths[r]) / 2;
+      rw.forEach(m => { const w = wOf(m.id, subOf(m), 150); nodes[m.id] = { x, y: rowY(r), w, h: BH, m }; x += w + GX; });
+    }
+    colMid[c] = x0 + cw / 2; x0 += cw + CG;
+  });
+  W = Math.max(x0 - CG + PAD, 420); y = rowY(maxRank + 1);
+  }
+  // Data model box: objects on one row, the small pieces under them.
+  const objs = M.mods.filter(m => M.box.has(m.id) && isObject(m)), bits = M.mods.filter(m => M.box.has(m.id) && !isObject(m));
+  let dm = null;
+  if (objs.length || bits.length) {
+    const inner = Math.max(objs.reduce((s, m) => s + wOf(m.id, subOf(m), 170) + GX, -GX), 0);
+    const bw = Math.max(150, Math.min(250, Math.max(0, ...bits.map(m => Math.round(m.id.length * 6.9 + 26))))), perRow = Math.max(1, Math.floor((Math.max(inner, 3 * bw + 2 * GX) + GX) / (bw + GX)));
+    const dw = Math.max(inner, Math.min(bits.length, perRow) * (bw + GX) - GX) + 40, dx = Math.max(PAD, (W - dw) / 2);
+    W = Math.max(W, dx + dw + PAD);
+    let oy = y + 34, ox = dx + 20 + (dw - 40 - inner) / 2;
+    objs.forEach(m => { const w = wOf(m.id, subOf(m), 170); nodes[m.id] = { x: ox, y: oy, w, h: BH, m }; ox += w + GX; });
+    const by = oy + (objs.length ? BH + 14 : 0);
+    bits.forEach((m, i) => { nodes[m.id] = { x: dx + 20 + (i % perRow) * (bw + GX), y: by + Math.floor(i / perRow) * (SH + 10), w: bw, h: SH, m, small: true }; });
+    const dh = (by - y) + (bits.length ? Math.ceil(bits.length / perRow) * (SH + 10) - 10 : -14) + 20;
+    dm = { x: dx, y, w: dw, h: dh }; y += dh + GY;
+  }
+  // Modules no actor reaches: one quiet row at the end, so every module still shows its state.
+  if (M.other.length) {
+    let ox = PAD; const oy = y + 22;
+    M.other.forEach(m => { const w = Math.max(130, Math.min(260, Math.round(m.id.length * 6.9 + 26))); if (ox + w > W - PAD) { ox = PAD; } nodes[m.id] = { x: ox, y: oy, w, h: SH, m, small: true }; ox += w + GX; });
+    y = oy + SH + PAD;
+  }
+  const H = y + (dm || M.other.length ? 0 : PAD);
+  // L-shaped arrows: leave the source's bottom, run along the gap below its row, drop down a free lane, enter the target's top.
+  // Wrapper labels count as boxes here, so no arrow is routed through a group's name.
+  const boxes = [...Object.entries(nodes).map(([id, n]) => ({ id, ...n })), ...wraps.filter(g => g.label).map((g, i) => ({ id: '#g' + i, x: g.x + 10, y: g.y + 6, w: g.lw + 12, h: 20 }))];
+  const free = (x, y1, y2, skip) => boxes.every(b => skip.includes(b.id) || x < b.x - 6 || x > b.x + b.w + 6 || Math.max(y1, y2) < b.y || Math.min(y1, y2) > b.y + b.h);
+  const lane = (want, y1, y2, skip, alt) => { if (free(want, y1, y2, skip)) return want; if (alt !== undefined && free(alt, y1, y2, skip)) return alt;
+    const cands = boxes.flatMap(b => [b.x - 9, b.x + b.w + 9]).filter(x => x > 4 && x < W - 4 && free(x, y1, y2, skip)).sort((p, q) => Math.abs(p - want) - Math.abs(q - want)); return cands.length ? cands[0] : want; };
+  const edges = [...M.actors.flatMap(a => a.uses.map(u => [a.id, u])), ...M.mods.flatMap(m => nodes[m.id] && !M.other.includes(m) ? M.usesIn(m).map(u => [m.id, u]) : [])].filter(([a, b]) => nodes[a] && nodes[b] && !M.other.includes(M.by[b]));
+  // Into the data model, the first actor's path enters from the top; other columns come in from the side
+  // that faces them, so two paths never merge into one line above the box (as in the reference drawing).
+  const colOf = id => nodes[id].col ?? (id[0] === '@' ? +id.slice(1) : M.col[id]), side = {};
+  if (dm) for (const b of new Set(edges.map(e => e[1]).filter(b => M.box.has(b)))) {
+    const inc = edges.filter(e => e[1] === b && !M.box.has(e[0])), cols = [...new Set(inc.map(e => colOf(e[0])))], t = nodes[b], tx = t.x + t.w / 2;
+    if (cols.length < 2) continue;
+    const top = Math.min(...cols);
+    inc.forEach(([a]) => { const c = colOf(a); if (c !== top) side[a + '|' + b] = colMid[c] > tx ? 'r' : 'l'; });
+  }
+  const arrows = edges.map(([a, b]) => {
+    const s = nodes[a], t = nodes[b], sx = s.x + s.w / 2, tx = t.x + t.w / 2, sd = side[a + '|' + b]; let d;
+    if (sd) {
+      const y1 = s.y + s.h + Math.min(GY / 2, 14), ey = t.y + t.h / 2, ex = sd === 'r' ? t.x + t.w : t.x;
+      const x = lane(sd === 'r' ? Math.max(sx, t.x + t.w + 24) : Math.min(sx, t.x - 24), y1, ey, [a, b]);
+      d = `M${sx} ${s.y + s.h} L${sx} ${y1} L${x} ${y1} L${x} ${ey} L${ex} ${ey}`;
+    }
+    else if (Math.abs(s.y - t.y) < 4) { const r = t.x > s.x; d = `M${r ? s.x + s.w : s.x} ${s.y + s.h / 2} L${r ? t.x : t.x + t.w} ${t.y + t.h / 2}`; }
+    else if (t.y > s.y) {
+      const y1 = s.y + s.h + Math.min(GY / 2, 14), y2 = (dm && M.box.has(b) && !M.box.has(a) ? dm.y : t.y) - Math.min(GY / 2, 14);
+      const x = lane(tx, y1, y2, [a, b], sx);
+      d = Math.abs(x - sx) < 1 && Math.abs(x - tx) < 1 ? `M${sx} ${s.y + s.h} L${tx} ${t.y}` : `M${sx} ${s.y + s.h} L${sx} ${y1} L${x} ${y1} L${x} ${y2} L${tx} ${y2} L${tx} ${t.y}`;
+    } else { const y1 = s.y - 12, y2 = t.y + t.h + 12, x = lane(sx, y1, y2, [a, b]); d = `M${sx} ${s.y} L${sx} ${y1} L${x} ${y1} L${x} ${y2} L${tx} ${y2} L${tx} ${t.y + t.h}`; }
+    return `<path class="arr" data-a="${E(a)}" data-b="${E(b)}" d="${d.replace(/(L(\S+) (\S+)) L\2 \3/g, '$1')}" marker-end="url(#bm-ar)"/>`;
+  });
+  const sel = ui.dsel[slug], fit = (s, w, px) => { const n = Math.floor((w - 20) / px); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+  const svgNodes = Object.entries(nodes).map(([id, n]) => {
+    if (n.actor) return `<g><rect class="actor" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="8"/><text class="ttl" x="${n.x + n.w / 2}" y="${n.y + n.h / 2}" text-anchor="middle" dominant-baseline="central">${E(fit(n.actor.name, n.w, 7.8))}</text></g>`;
+    const m = n.m, st = STATE(m), sub = n.small ? '' : subOf(m);
+    return `<g class="node${n.small ? ' small' : ''}${sel === id ? ' on' : ''}" data-id="${E(id)}" tabindex="0" role="button" aria-label="${E(m.id)}, ${STATE_L[st]}"><title>${E(m.id)}: ${STATE_L[st]}</title>` +
+      `<rect class="box" style="--c:${STATE_C[st]}" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="8"/>` +
+      `<text class="ttl" x="${n.x + n.w / 2}" y="${n.y + (sub ? 20 : n.h / 2)}" text-anchor="middle" dominant-baseline="central">${E(fit(m.id, n.w, n.small ? 6.8 : 7.8))}</text>` +
+      (sub ? `<text class="sub" x="${n.x + n.w / 2}" y="${n.y + 39}" text-anchor="middle" dominant-baseline="central">${E(fit(sub, n.w, 6.6))}</text>` : '') + `</g>`;
+  });
+  const used = new Set(M.mods.map(STATE));
+  const det = sel && M.by[sel] ? (() => { const m = M.by[sel], ub = [...M.actors.filter(a => a.uses.includes(sel)).map(a => a.name), ...M.mods.filter(p => M.usesIn(p).includes(sel)).map(p => p.id)];
+    return `<div class="mdet"><div class="hd"><i class="pip on" style="--c:${STATE_C[STATE(m)]}"></i><b>${E(m.id)}</b><span class="who">${STATE_L[STATE(m)]}</span><button type="button" class="ib" data-act="dsel" data-id="" title="Close" aria-label="Close">${icon('x')}</button></div>` +
+      (m.what ? `<p>${E(m.what)}</p>` : '') + (m.group ? `<p>Part of ${E(m.group)}</p>` : '') + (m.lane ? `<p>Built by ${E(m.lane)}</p>` : '') + (M.usesIn(m).length ? `<p>Uses ${E(M.usesIn(m).join(', '))}</p>` : '') + (ub.length ? `<p>Used by ${E(ub.join(', '))}</p>` : '') + `</div>`; })() : '';
+  return `<div class="diagram"><svg viewBox="0 0 ${Math.ceil(W)} ${Math.ceil(H)}" style="max-width:${Math.ceil(W)}px; min-width:${Math.min(Math.ceil(W), 700)}px" role="img" aria-label="Build diagram: who uses the build, its modules${wraps.length ? ' in capability groups' : ''} and the data model">` +
+    `<defs><marker id="bm-ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>` +
+    wraps.filter(g => g.label).map(g => `<rect class="dm" x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14"/><text class="dml" x="${g.x + 16}" y="${g.y + 17}" dominant-baseline="central">${E(g.label)}</text>`).join('') +
+    (dm ? `<rect class="dm" x="${dm.x}" y="${dm.y}" width="${dm.w}" height="${dm.h}" rx="18"/><text class="dml" x="${dm.x + 16}" y="${dm.y + 18}" dominant-baseline="central">Data model</text>` : '') +
+    (M.other.length ? `<text class="dml" x="${PAD}" y="${nodes[M.other[0].id].y - 12}">Also in this build</text>` : '') +
+    arrows.join('') + svgNodes.join('') + `</svg></div>` + det +
+    `<div class="legend">${Object.keys(STATE_L).filter(k => used.has(k)).map(k => `<span><i style="--c:${STATE_C[k]}"></i>${STATE_L[k]}</span>`).join('')}<span>Click a box for its details</span></div>`;
+}
+// Pointing at a box lights up its own arrows and fades the rest; clicking opens its details under the diagram.
+app.addEventListener('mouseover', ev => {
+  const svg = ev.target.closest && ev.target.closest('.diagram svg'); if (!svg) return;
+  const n = ev.target.closest('.node'), id = n ? n.dataset.id : ui.dsel[slug];
+  svg.classList.toggle('focus', !!id);
+  svg.querySelectorAll('.arr').forEach(p => p.classList.toggle('hl', !!id && (p.dataset.a === id || p.dataset.b === id)));
+});
+app.addEventListener('click', ev => { const n = ev.target.closest && ev.target.closest('.diagram .node'); if (!n) return; ui.dsel[slug] = ui.dsel[slug] === n.dataset.id ? '' : n.dataset.id; render(); });
+app.addEventListener('keydown', ev => { const n = (ev.key === 'Enter' || ev.key === ' ') && ev.target.closest && ev.target.closest('.diagram .node'); if (!n) return; ev.preventDefault(); ui.dsel[slug] = ui.dsel[slug] === n.dataset.id ? '' : n.dataset.id; render(); });
+const VIEWS = {
+  grill: all => itemsTab(all.filter(d => d.grill), true),
+  spec(all) {
+    const spec = A(D.deploy && D.deploy.links).find(l => /spec/i.test(l[0])), ms = mods(), lanes = new Set(ms.map(m => m.lane).filter(Boolean));
+    if (!spec && !ms.length) return '';
+    return (spec ? `<div class="chk in">${icon('file')}<span class="tt">${E(spec[1] || 'Spec')}</span><span class="val">${linkTo(spec, 'Open')}</span></div>` : '<p class="empty">No spec linked yet.</p>') +
+      `<div class="met">${metric('Agents', lanes.size || 'Not set')}${metric('Modules planned', ms.length)}${metric('Inputs needed', all.filter(d => d.kind === 'input').length)}</div>`;
+  },
+  build() {
+    const ms = mods(); if (!ms.length) return '';
+    // The diagram opens from a light row, the same fold as the Decided list.
+    const open = !!ui.exp['v:diagram'];
+    const diagram = `<button class="fold" data-act="exp" data-k="v:diagram" data-key="exp:v:diagram" aria-expanded="${open}">${icon('chev')}${open ? 'Hide' : 'Show'} build diagram</button>` + (open ? buildDiagram() : '');
+    const by = {}; ms.forEach(m => (by[m.lane || m.layer] = by[m.lane || m.layer] || []).push(m));
+    // Lines from earlier days may be stale: they fold away under one quiet row.
+    const all = A(D.now).filter(n => n.by !== 'you' && !n.blocked && !n.step), today = new Date().toLocaleDateString('sv');
+    const work = all.filter(n => n.at === today), old = all.filter(n => n.at !== today);
+    return diagram + `<div class="lanes">` + Object.entries(by).map(([k, l]) => { const c = l.filter(m => m.code === 'committed').length;
+      return `<div class="lanec"><h3>${E(k)}<span>${c} of ${l.length} committed</span></h3><div class="bar"><i style="--c:var(--s-committed);width:${Math.round(100 * c / l.length)}%"></i></div>` +
+        l.map(m => `<div class="line"><span class="tt">${E(m.id)}</span>${stateIcon(m)}</div>`).join('') + '</div>'; }).join('') + '</div>' +
+      (old.length ? liteRow('v:old', 'clock', 'Older agent notes, may be stale', String(old.length), old.map(n => `<p>${E(n.t)}</p>`).join('')) : '') +
+      (work.length ? `<p class="sec">Agent is working on</p><div class="list">${work.map(n => `<div class="chk">${icon('refresh')}<span class="tt">${E(n.t)}</span></div>`).join('')}</div>` : '');
+  },
+  qa() {
+    const runs = A(D.qa); if (!runs.length) return '';
+    const q = runs[0], qs = A(q.steps), n = r => qs.filter(s => s[1] === r).length;
+    const sorted = [...qs].sort((a, b) => (a[1] === 'pass') - (b[1] === 'pass'));
+    return `<div class="met">${metric('Pass', n('pass'), 'ok')}${metric('Fail', n('fail'), n('fail') ? 'bad' : '')}${metric('Open', n('open'))}</div>` +
+      (q.verdict ? `<p>${E(q.verdict)}</p>` : '') + `<div class="list">${sorted.map(resLine).join('')}</div>` + (q.plan ? `<p>${ext(q.plan, 'Test plan')}</p>` : '') +
+      (runs.length > 1 ? liteRow('v:runs', 'clock', 'Earlier runs', String(runs.length - 1), runs.slice(1).map(r => `<p>Run ${E(r.run)}: ${E(r.verdict || A(r.steps).filter(s => s[1] === 'pass').length + ' of ' + A(r.steps).length + ' pass')}</p>`).join('')) : '');
+  },
+  review: () => '',
+  deploy() {
+    const ms = mods(), checks = A(D.deploy && D.deploy.checks); if (!ms.length && !checks.length) return '';
+    return (ms.length ? `<div class="met">${metric('In sandbox', `${ms.filter(m => m.deployed !== 'none').length} of ${ms.length}`)}${metric('In production', `${ms.filter(m => m.deployed === 'prod').length} of ${ms.length}`)}</div>` : '') +
+      (checks.length ? `<p class="sec">Checks</p><div class="list">${checks.map(resLine).join('')}</div>` : '');
+  },
+  quiz() { const q = A(D.deploy && D.deploy.links).find(l => /quiz/i.test(l[0])); return q ? `<div class="chk">${icon('eye')}<span class="tt">${E(q[1] || 'Build quiz')}</span><span class="val">${linkTo(q, 'Open')}</span></div>` : ''; },
+  close: () => '',
+  complete(all) {
+    const ms = mods(), q = A(D.qa)[0];
+    return `<div class="met">${metric('Committed', `${ms.filter(m => m.code === 'committed').length} of ${ms.length}`)}${metric('In production', `${ms.filter(m => m.deployed === 'prod').length} of ${ms.length}`)}${metric('Decisions', all.filter(d => d.done).length)}</div>` +
+      (q && q.verdict ? `<p>Last QA: ${E(q.verdict)}</p>` : '');
+  }
+};
+function waitingLines() {
+  return A(D.now).map((n, i) => ({ ...n, i })).filter(n => n.blocked && n.by !== 'you').map(n => {
+    const k = 'w' + n.i, t = n.t.replace(/^waiting on\s+/i, '').replace(/^/, n.who && !n.t.toLowerCase().includes(n.who.toLowerCase()) ? n.who + ': ' : '');
+    return `<button class="wait" data-act="exp" data-k="${k}" data-key="exp:${k}" aria-expanded="${!!ui.exp[k]}" title="${E(t)}">${icon('clock')}<span class="tt">${E(t)}</span></button>`;
+  }).join('');
+}
+function sendBar() {
+  const n = Object.keys(D.draft && D.draft.items || {}).length + A(D.draft && D.draft.notes).length;
+  return n ? `<div class="sendbar" role="region" aria-label="Answers not sent yet"><span class="tt">${n} ready to send</span>` +
+    `<button type="button" class="tb" data-act="discard" data-key="discard">Discard</button>` +
+    `<button type="button" class="go" data-act="sendall" data-key="sendall" title="Send all" aria-label="Send all ${n}">${icon('send')}</button></div>` : '';
+}
+// Delete is confirmed in place. The map goes to the Trash; ticked cleanup is queued for an agent (bm cleanup).
+function confirmDelete() {
+  const br = D.branch && !/^(main|master)$/.test(D.branch) ? D.branch : '';
+  return `<form class="confirm" id="delform"><b>Delete ${E(D.feature)}?</b><p>The map goes to the Trash. Archive keeps it on the board instead.</p>` +
+    (br ? `<label><input type="checkbox" name="cleanup" value="branch" checked> Branch ${E(br)} and its worktree</label>` : '') +
+    `<label><input type="checkbox" name="cleanup" value="sessions" checked> Sessions that worked on it</label>` +
+    `<p>An agent removes what you tick. Deleting sessions asks you once more in the app.</p>` +
+    `<div class="row"><button type="button" class="tb" data-act="del" data-key="delcancel">Cancel</button>` +
+    (D.stage !== 'archive' ? `<button type="button" class="tb" data-act="archive" data-key="archive">Archive instead</button>` : '') +
+    `<button type="submit" class="tb bad" data-key="delgo">Delete</button></div></form>`;
+}
+
+let renderLater = false;
+function render() {
+  if (dragSlug || dragItem) { renderLater = true; return; }
+  const f = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.key : null;
+  const y = scrollY;
+  const typed = {}; app.querySelectorAll('input[id]').forEach(i => { if (i.value) typed[i.id] = i.value; });
+  const ae = document.activeElement, fid = ae && ae.tagName === 'INPUT' ? ae.id : '', caret = fid ? [ae.selectionStart, ae.selectionEnd] : null;
+  document.title = D ? D.feature + ' build map' : 'Build maps';
+  app.classList.toggle('wide', !D && !problem && !!maps);
+  app.innerHTML = D ? renderMap() : (problem ? `<div class="head"><a class="back" href="#/" title="All maps" aria-label="All maps">${icon('back')}</a></div><p class="hint bad" role="alert">${E(problem)}</p>` : (maps ? renderList() : '<p class="hint">Loading</p>'));
+  for (const [id, v] of Object.entries(typed)) { const i = document.getElementById(id); if (i) i.value = v; }
+  const fi = fid && document.getElementById(fid);
+  if (fi) { fi.focus({ preventScroll: true }); try { fi.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
+  else if (f) { const el = app.querySelector(`[data-key="${f}"]`); if (el) el.focus({ preventScroll: true }); }
+  scrollTo(0, y);
+  const strip = app.querySelector('.steps'), here = strip && app.querySelector('.step[aria-current], .step.sel');
+  if (strip && here && strip.scrollWidth > strip.clientWidth) strip.scrollLeft = here.offsetLeft - strip.offsetLeft - (strip.clientWidth - here.offsetWidth) / 2;
+}
+
+const noteOf = i => { const el = document.getElementById('nt-' + i); const v = el ? el.value.trim() : ''; if (el) el.value = ''; return v; };
+app.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-act]'); if (b && !D && b.dataset.act === 'col') { toggleFold(b.dataset.k); return; }
+  if (!b || !D) return;
+  const act = b.dataset.act;
+  if (act === 'tab') { ui.tab[slug] = b.dataset.k; render(); }
+  else if (act === 'exp') { const k = b.dataset.k; ui.exp[k] = !ui.exp[k]; render(); if (ui.exp[k]) { const n = document.getElementById('nt-' + k.slice(1)); if (n && k[0] === 'd' && !A(D.plan.decisions)[+k.slice(1)].opts && (A(D.plan.decisions)[+k.slice(1)].kind || 'decision') === 'decision') n.focus(); } }
+  else if (act === 'pick') {
+    const d = A(D.plan && D.plan.decisions)[+b.dataset.i]; if (!d) return;
+    const opts = A(d.opts).length ? d.opts : DEFAULT_OPTS[d.kind || 'decision'] || [], o = opts[+b.dataset.o]; if (!o) return;
+    const note = noteOf(b.dataset.i); delete ui.exp['d' + b.dataset.i];
+    send({ op: 'draft', match: +b.dataset.i, answer: o.l, note });
+  }
+  else if (act === 'unpick') { delete ui.exp['d' + b.dataset.i]; send({ op: 'draft', match: +b.dataset.i, clear: true }); }
+  else if (act === 'dropnote') send({ op: 'draft', dropNote: +b.dataset.n });
+  else if (act === 'discard') send({ op: 'draft', discard: true });
+  else if (act === 'sendall') send({ op: 'send' });
+  else if (act === 'del') { ui.del = !ui.del; render(); }
+  else if (act === 'dsel') { ui.dsel[slug] = ''; render(); }
+  else if (act === 'view') { ui.view[slug] = b.dataset.k; ui.tab[slug] = 'step'; render(); }
+  else if (act === 'move') { delete ui.view[slug]; send({ op: 'stage', stage: b.dataset.k }); }
+  else if (act === 'archive') { ui.del = false; send({ op: 'stage', stage: 'archive' }); }
+  else if (act === 'undo') { delete ui.exp['s' + b.dataset.i]; send({ op: 'decision', match: +b.dataset.i, answer: '' }); }
+});
+app.addEventListener('submit', ev => {
+  ev.preventDefault(); if (!D) return;
+  const f = ev.target;
+  if (f.id === 'noteform') { const i = f.querySelector('input'), v = i.value.trim(); if (!v) return; i.value = ''; send({ op: 'draft', t: v }); return; }
+  if (f.id === 'delform') { delMap([...f.querySelectorAll('input[name="cleanup"]:checked')].map(x => x.value)); return; }
+  if (f.classList.contains('acts')) {
+    // Enter in the note box answers in your own words.
+    const v = noteOf(f.dataset.i); if (!v) return; delete ui.exp['d' + f.dataset.i];
+    const d = A(D.plan && D.plan.decisions)[+f.dataset.i], hasOpts = d && (A(d.opts).length || A(DEFAULT_OPTS[d.kind || 'decision']).length);
+    // With options, Enter keeps any picked option and saves the note; without, the text is the answer.
+    const dr = draftOf(f.dataset.i);
+    send(hasOpts ? { op: 'draft', match: +f.dataset.i, answer: dr && !dr.tuck ? dr.a : v, note: dr && !dr.tuck ? v : '' } : { op: 'draft', match: +f.dataset.i, answer: v });
+  }
+});
+
+// Drag: board cards between columns; console items to reorder, or onto "Decided" to set them aside.
+let dragSlug = '', dragItem = null;
+app.addEventListener('dragstart', ev => {
+  if (D) {
+    const it = ev.target.closest && ev.target.closest('.it'); if (!it) return;
+    dragItem = it; app.classList.add('dragging-item'); ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', it.dataset.i);
+    requestAnimationFrame(() => it.classList.add('dragging')); return;
+  }
+  const c = ev.target.closest && ev.target.closest('.card'); if (!c) return;
+  dragSlug = c.dataset.slug; ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', dragSlug);
+  requestAnimationFrame(() => c.classList.add('dragging'));
+});
+function endDrag() {
+  dragSlug = ''; dragItem = null; app.classList.remove('dragging-item');
+  app.querySelectorAll('.dragging, .over, .drop').forEach(e => e.classList.remove('dragging', 'over', 'drop'));
+  if (renderLater) { renderLater = false; render(); }
+}
+app.addEventListener('dragend', endDrag);
+app.addEventListener('dragover', ev => {
+  if (dragItem) {
+    const tuck = ev.target.closest('[data-drop="tuck"]');
+    app.querySelectorAll('.drop').forEach(e => { if (e !== tuck) e.classList.remove('drop'); });
+    if (tuck) { ev.preventDefault(); tuck.classList.add('drop'); return; }
+    const list = dragItem.parentElement, o = ev.target.closest('.it');
+    if (!o || o === dragItem || o.parentElement !== list) { if (ev.target.closest('.list') === list) ev.preventDefault(); return; }
+    ev.preventDefault(); const r = o.getBoundingClientRect();
+    list.insertBefore(dragItem, ev.clientY < r.top + r.height / 2 ? o : o.nextSibling); return;
+  }
+  const col = dragSlug && ev.target.closest('.col'); if (!col) return;
+  ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+  app.querySelectorAll('.col.over').forEach(e => { if (e !== col) e.classList.remove('over'); }); col.classList.add('over');
+});
+app.addEventListener('dragleave', ev => { const col = ev.target.closest('.col'); if (col && !col.contains(ev.relatedTarget)) col.classList.remove('over'); });
+app.addEventListener('drop', ev => {
+  if (dragItem) {
+    ev.preventDefault(); const it = dragItem, tuck = ev.target.closest('[data-drop="tuck"]');
+    const ids = [...it.parentElement.querySelectorAll('.it')].map(e => +e.dataset.i);
+    dragItem = null; renderLater = false; endDrag();
+    if (tuck) send({ op: 'draft', match: +it.dataset.i, answer: 'Set aside', tuck: true });
+    else send({ op: 'order', ids });
+    return;
+  }
+  const col = dragSlug && ev.target.closest('.col'); if (!col) return;
+  ev.preventDefault(); const s = dragSlug; dragSlug = ''; renderLater = false; move(s, col.dataset.col);
+});
+app.addEventListener('keydown', ev => {
+  const c = !D && ev.altKey && (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') && ev.target.closest('.card'); if (!c) return;
+  ev.preventDefault(); const m = A(maps).find(x => x.slug === c.dataset.slug); if (!m) return;
+  const i = COLS.indexOf(COL_OF(m.stage)) + (ev.key === 'ArrowRight' ? 1 : -1); if (i >= 0 && i < COLS.length) move(m.slug, COLS[i]);
+});
+addEventListener('hashchange', () => { ui.msg = ''; ui.exp = {}; ui.del = false; load(); });
+async function delMap(cleanup) {
+  try { await api(`/api/map/${slug}/delete`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: slug, cleanup }) }); }
+  catch (e) { ui.msg = `Could not delete: ${e.message}`; render(); return; }
+  ui.del = false; location.hash = '#/';
+}
+
+// Live updates: the server tells every open page when a map file changes (our own edits, the CLI, or an agent).
+let reloadTimer;
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => { ui.live = true; if (!D) render(); };
+  es.onerror = () => { ui.live = false; };
+  es.onmessage = ev => { let m = {}; try { m = JSON.parse(ev.data); } catch (e) {} if (!slug || m.slug === slug) { clearTimeout(reloadTimer); reloadTimer = setTimeout(load, 60); } };
+}
+load(); connect();
+</script>
+</body>
+</html>

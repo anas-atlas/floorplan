@@ -6,6 +6,10 @@ Atlas DevShop's first build on Floorplan 0.1.5. Installs as `atlas-floorplan` fr
 
 - **Plugin renamed** to `atlas-floorplan`, so it never clashes with Hayden's `floorplan@floorplan`.
 - **Build map code under MIT**, the same license as the fork (`skills/build-map/LICENSE`).
+- **The build map moves in** as its own skill, `skills/build-map/`: the `bm` CLI, the page's server on 127.0.0.1:4330 and the page. Maps stay in `~/build-maps` and the JSON format is unchanged, so existing maps read exactly as before.
+- **`bm` on the PATH:** `bm install-shim` writes a small launcher to `~/.local/bin/bm` that always runs the installed plugin's CLI.
+- **No map can be committed here:** a test fails if any tracked file in this public repo is a build map.
+- **Tests for the build map** run with Floorplan's under `npm test`: the CLI, repo linking, the server's checks and the launcher.
 
 ## 0.1.5 (2026-10-28)
 
