@@ -43,6 +43,10 @@ const HELP = `Build map CLI  (maps live in ~/build-maps/<name>.json, or BUILD_MA
   bm batch <map> '<json array of ops>'       several edits, one atomic write ("-" reads the array from stdin)
   bm op <map> '<json op>'                    any single op, e.g. {"op":"stage","stage":"qa"}
 
+Page and checks:
+  bm open [map] [--port N] [--no-open]       start the owner's page on 127.0.0.1:4330 (or reuse it) and open it
+  bm health [map]                            what on a map is wrong, stale or stuck; every active map with no name
+
 Code (the repo's Floorplan map):
   bm here <map>                              link the map to the repo you are in (automatic when its branch is the map's branch)
   bm code <map>                              which modules match a file on the code map, and whether the code map lags the branch
@@ -54,7 +58,7 @@ Edits are tagged "agent" in the log; set --by <name> or BM_BY to tag another wri
 
 function parse(argv) {
   const pos = [], flags = {}, multi = {};
-  const bool = new Set(['blocked', 'open', 'done', 'quiet', 'all', 'grill', 'remove']);
+  const bool = new Set(['blocked', 'open', 'done', 'quiet', 'all', 'grill', 'remove', 'no-open']);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
@@ -151,6 +155,12 @@ function main() {
       console.log(`${c.repo} (${c.branch}) · code map "${c.project}" built ${c.stale ? c.stale.builtAt : '?'}`);
       if (c.stale && c.stale.lags) console.log(`CODE MAP LAGS THE BRANCH: ${c.stale.files} file(s) changed in ${c.stale.commits} commit(s) since it was built${c.stale.builtBranch && c.stale.builtBranch !== c.stale.branch ? ` on ${c.stale.builtBranch}` : ''}. Update it with the floorplan skill.`);
       for (const x of mods) console.log(`  ${x.id.padEnd(34)} ${c.matches[x.id] ? c.matches[x.id].file : '(no file by this name)'}`);
+      return;
+    }
+    case 'open': return require('./open.cjs').open({ slug, port: flags.port && +flags.port, noOpen: !!flags['no-open'] }).then(r => { console.log(r.text); if (!r.ok) process.exitCode = 1; });
+    case 'health': {
+      const health = require('./health.cjs'), slugs = slug ? [slug] : lib.list().filter(x => !x.error && !['complete', 'archive'].includes(x.stage)).map(x => x.slug);
+      for (const s of slugs) { const h = health.check(lib.read(s), lib.validate); console.log(`${s}: ${h.length ? h.length + ' to look at' : 'healthy'}`); for (const x of h) console.log(`  ${x.level.padEnd(9)} ${x.text}`); }
       return;
     }
     case 'install-shim': return console.log(require('./shim.cjs').install());

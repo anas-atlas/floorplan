@@ -9,6 +9,11 @@ Atlas DevShop's first build on Floorplan 0.1.5. Installs as `atlas-floorplan` fr
 - **The build map moves in** as its own skill, `skills/build-map/`: the `bm` CLI, the page's server on 127.0.0.1:4330 and the page. Maps stay in `~/build-maps` and the JSON format is unchanged, so existing maps read exactly as before.
 - **`bm` on the PATH:** `bm install-shim` writes a small launcher to `~/.local/bin/bm` that always runs the installed plugin's CLI.
 - **No map can be committed here:** a test fails if any tracked file in this public repo is a build map.
+- **Health check for maps:** `bm health` and a Health row on each map list what is wrong, stale or stuck (a stage past build with modules not committed, answers sent but not applied, a map idle for a week, old "working on" lines). Board cards show how many are important.
+- **Since you last looked:** modules changed since you last opened a map get a green ring and a Changed tag, and its board card says New.
+- **`bm open [map]`** starts the page on 127.0.0.1:4330 (or reuses it, restarting it when the plugin brings a newer one), opens the browser, and stops it 4 hours after the last tab closes.
+- **Sessions find the map on their own:** a checkout linked to a map gets a short block in its CLAUDE.local.md (its own markers, next to Floorplan's, kept out of git through `.git/info/exclude`).
+- **Writing guide** for everything agents put on a map (`skills/build-map/references/writing-guide.md`).
 - **Tests for the build map** run with Floorplan's under `npm test`: the CLI, repo linking, the server's checks and the launcher.
 
 ## 0.1.5 (2026-10-28)

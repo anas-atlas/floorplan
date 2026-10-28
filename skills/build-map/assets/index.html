@@ -152,6 +152,11 @@ h1 { font-size: 20px; margin: 0; text-wrap: balance; }
 .line > span:not(.tt) { font-size: 13px; white-space: nowrap; }
 .line .tt { flex: 1; min-width: 0; color: var(--fg); }
 .line.bad .tt { color: var(--bad); }
+/* changed since you last looked: a green ring, like Floorplan's recent-work cards */
+.line.chg { box-shadow: 0 0 0 2px var(--ok); border-radius: 6px; padding-left: 6px; padding-right: 6px; }
+.chg-tag { font: 600 11px var(--f-mono); color: var(--ok-text); }
+.badge.new { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok-text); }
+.chk.hl-important .i { color: var(--bad); } .chk.hl-worth .i { color: var(--warn); }
 .pip { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--s-none); flex: none; box-sizing: border-box; }
 .pip.on { background: var(--c); border-color: var(--c); }
 .grp { font-size: 12px; color: var(--faint); margin: 6px 0 0; }
@@ -349,7 +354,18 @@ function toggleFold(k) {
   try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch (e) { /* storage blocked: fold for this visit only */ }
   render();
 }
-let slug = '', D = null, maps = null, problem = '';
+// What you last saw of each map (its rev), so changes since then get a green ring. Per browser, like the folds.
+const SEEN_KEY = 'bm.seen';
+let seen = (() => { try { const v = JSON.parse(localStorage.getItem(SEEN_KEY)); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } })();
+const since = {}; // the rev this visit started from, per map: everything after it is new to you
+function markSeen(s, rev) {
+  if (since[s] === undefined) since[s] = seen[s] === undefined ? rev : seen[s];
+  seen[s] = rev; try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch (e) { /* storage blocked: highlights last this visit only */ }
+}
+// Changes after that rev by anyone but you, and the modules they name.
+const news = () => A(D.log).filter(l => (l[3] || 0) > (since[slug] ?? D.rev) && l[2] !== 'you');
+const changedMods = () => { const ls = news().map(l => String(l[1])); return new Set(mods().filter(m => ls.some(t => t.includes(m.id))).map(m => m.id)); };
+let slug = '', D = null, maps = null, problem = '', HEALTH = [];
 const app = document.getElementById('app');
 if (location.port !== '4330') { document.getElementById('copytag').hidden = false; }
 
@@ -362,7 +378,7 @@ async function load() {
   try {
     slug = decodeURIComponent((location.hash.match(/^#\/([a-z0-9_-]+)/) || [])[1] || '');
     problem = '';
-    if (slug) { const j = await api('/api/map/' + slug); D = j.map; if (j.warnings.length) problem = 'This map has problems: ' + j.warnings.join('; '); }
+    if (slug) { const j = await api('/api/map/' + slug); D = j.map; HEALTH = A(j.health); markSeen(slug, D.rev || 0); if (j.warnings.length) problem = 'This map has problems: ' + j.warnings.join('; '); }
     else { D = null; maps = (await api('/api/maps')).maps; }
   } catch (e) { D = null; problem = e.message; }
   render();
@@ -380,7 +396,10 @@ function renderList() {
   const card = m => {
     const done = m.stage === 'complete';
     const pc = (n, c) => `<div class="bar"><i style="--c:${c};width:${done ? 100 : m.total ? Math.round(100 * n / m.total) : 0}%"></i></div>`;
+    const fresh = seen[m.slug] !== undefined && (m.rev || 0) > seen[m.slug];
     const flags = [m.forYou && `<span class="badge">${m.forYou} for you</span>`, m.blocked && '<span class="chip" style="--c:var(--bad)">Blocked</span>',
+      fresh && '<span class="badge new" title="Changed since you last opened it">New</span>',
+      m.health && m.health.important && `<span class="chip" style="--c:var(--bad)" title="Health: open the map to see what">${m.health.important} to fix</span>`,
       m.stage === 'archive' && m.was && `<span class="who">from ${E(FLOW_NAMES[m.was] || m.was)}</span>`].filter(Boolean).join('');
     return `<a class="card${pending[m.slug] ? ' pending' : ''}" href="#/${E(m.slug)}" draggable="true" data-slug="${E(m.slug)}" data-key="card:${E(m.slug)}" aria-describedby="board-hint">` +
       `<b>${E(m.feature)}</b>` +
@@ -503,10 +522,20 @@ function renderMap() {
   const body = tab === 'inbox' ? itemsTab(inbox, false) : stepView(view, cur, all);
   return `<div class="head"><a class="back" href="#/" title="All maps" aria-label="All maps">${icon('back')}</a><h1>${E(D.feature)}</h1>` +
     `<button type="button" class="ib danger" data-act="del" data-key="del" title="Delete this map" aria-label="Delete this map" aria-expanded="${ui.del}">${icon('trash')}</button></div>` +
-    stepBar(cur, view) + (ui.del ? confirmDelete() : '') +
+    stepBar(cur, view) + (ui.del ? confirmDelete() : '') + glance() +
     (problem || ui.msg ? `<p class="hint bad" role="alert">${E(problem || ui.msg)}</p>` : '') +
     `<div class="tabs" role="tablist">` + tabs.map(([k, l, n]) => `<button class="tab" role="tab" data-act="tab" data-k="${k}" data-key="tab:${k}" aria-selected="${tab === k}">${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('') + `</div>` +
     `<div class="pane" role="tabpanel">${body}</div>` + sendBar();
+}
+// Two quiet rows under the steps: what changed since you last looked, and the map's health check.
+function glance() {
+  const ch = changedMods(), n = news().length, imp = HEALTH.filter(h => h.level === 'important').length;
+  const rows = [];
+  if (n) rows.push(liteRow('v:since', 'refresh', ch.size ? `${ch.size} module${ch.size > 1 ? 's' : ''} changed since you last looked` : 'Updated since you last looked', '',
+    ch.size ? `<p>${[...ch].map(E).join(', ')}</p><p class="sub">They have a green ring in the Build view.</p>` : ''));
+  if (HEALTH.length) rows.push(liteRow('v:health', 'alert', `Health: ${HEALTH.length} to look at`, imp ? `${imp} important` : '',
+    `<div class="list">${HEALTH.map(h => `<div class="chk hl-${h.level}">${icon(h.level === 'minor' ? 'eye' : 'alert')}<span class="tt">${E(h.text)}</span><span class="val">${h.level === 'important' ? 'Important' : h.level === 'worth' ? 'Worth fixing' : 'Minor'}</span></div>`).join('')}</div>`));
+  return rows.join('');
 }
 // Clicking a step shows its view; moving the map is a separate button inside that view.
 function stepBar(cur, view) {
@@ -736,13 +765,13 @@ const VIEWS = {
     // The diagram opens from a light row, the same fold as the Decided list.
     const open = !!ui.exp['v:diagram'];
     const diagram = `<button class="fold" data-act="exp" data-k="v:diagram" data-key="exp:v:diagram" aria-expanded="${open}">${icon('chev')}${open ? 'Hide' : 'Show'} build diagram</button>` + (open ? buildDiagram() : '');
-    const by = {}; ms.forEach(m => (by[m.lane || m.layer] = by[m.lane || m.layer] || []).push(m));
+    const by = {}, chg = changedMods(); ms.forEach(m => (by[m.lane || m.layer] = by[m.lane || m.layer] || []).push(m));
     // Lines from earlier days may be stale: they fold away under one quiet row.
     const all = A(D.now).filter(n => n.by !== 'you' && !n.blocked && !n.step), today = new Date().toLocaleDateString('sv');
     const work = all.filter(n => n.at === today), old = all.filter(n => n.at !== today);
     return diagram + `<div class="lanes">` + Object.entries(by).map(([k, l]) => { const c = l.filter(m => m.code === 'committed').length;
       return `<div class="lanec"><h3>${E(k)}<span>${c} of ${l.length} committed</span></h3><div class="bar"><i style="--c:var(--s-committed);width:${Math.round(100 * c / l.length)}%"></i></div>` +
-        l.map(m => `<div class="line"><span class="tt">${E(m.id)}</span>${stateIcon(m)}</div>`).join('') + '</div>'; }).join('') + '</div>' +
+        l.map(m => `<div class="line${chg.has(m.id) ? ' chg' : ''}"><span class="tt">${E(m.id)}</span>${chg.has(m.id) ? '<span class="chg-tag">Changed</span>' : ''}${stateIcon(m)}</div>`).join('') + '</div>'; }).join('') + '</div>' +
       (old.length ? liteRow('v:old', 'clock', 'Older agent notes, may be stale', String(old.length), old.map(n => `<p>${E(n.t)}</p>`).join('')) : '') +
       (work.length ? `<p class="sec">Agent is working on</p><div class="list">${work.map(n => `<div class="chk">${icon('refresh')}<span class="tt">${E(n.t)}</span></div>`).join('')}</div>` : '');
   },

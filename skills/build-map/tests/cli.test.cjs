@@ -50,3 +50,12 @@ test('errors are one line on stderr with exit code 1', () => {
   assert.equal(r.code, 1);
   assert.equal(r.err.trim(), 'bm: no map "missing"');
 });
+
+test('health lists what is wrong with a map, worst first', () => {
+  const dir = tmp('health');
+  bm(dir, ['new', 'h', 'Health']);
+  bm(dir, ['mod-add', 'h', 'Service', 'NotDone']);
+  bm(dir, ['stage', 'h', 'deploy']);
+  const out = bm(dir, ['health', 'h']).out;
+  assert.match(out, /^h: \d+ to look at\n {2}important At deploy with 1 module not committed/);
+});

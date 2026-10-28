@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const lib = require('./lib.cjs');
 const repos = require('./repos.cjs');
 const code = require('./code.cjs');
+const health = require('./health.cjs');
 
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf('--' + name); return i >= 0 && args[i + 1] ? args[i + 1] : dflt; };
@@ -95,6 +96,12 @@ function watch() {
   });
 }
 
+// Board cards also carry the map's rev (for "since you last looked") and its health counts.
+function withHealth(x) {
+  if (x.error) return x;
+  try { const map = lib.read(x.slug), h = health.check(map, lib.validate); return { ...x, rev: map.rev || 0, health: { important: h.filter(i => i.level === 'important').length, all: h.length } }; }
+  catch (e) { return x; }
+}
 const allowedHosts = () => new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`, `${HOST}:${PORT}`]);
 function sendJson(res, code, body) { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); }
 
@@ -135,7 +142,7 @@ const server = http.createServer(async (req, res) => {
       }
       return sendJson(res, 405, { error: 'method not allowed' });
     }
-    if (req.method === 'GET' && p === '/api/maps') return sendJson(res, 200, { maps: lib.list() });
+    if (req.method === 'GET' && p === '/api/maps') return sendJson(res, 200, { maps: lib.list().map(withHealth) });
     if (req.method === 'GET' && p === '/api/events') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
       res.write(': connected\n\n'); clients.add(res);
@@ -151,7 +158,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(docPage(doc.label, doc.p, md ? markdown(text) : `<div class="plain">${esc(text)}</div>`));
     }
     let m = p.match(/^\/api\/map\/([a-z0-9_-]+)$/);
-    if (m && req.method === 'GET') { const map = lib.read(m[1]); return sendJson(res, 200, { map, warnings: lib.validate(map) }); }
+    if (m && req.method === 'GET') { const map = lib.read(m[1]); return sendJson(res, 200, { map, warnings: lib.validate(map), health: health.check(map, lib.validate) }); }
     m = p.match(/^\/api\/map\/([a-z0-9_-]+)\/(op|delete)$/);
     if (m && req.method === 'POST') {
       const origin = req.headers.origin;
