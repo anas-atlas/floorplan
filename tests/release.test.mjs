@@ -10,8 +10,11 @@ const plugin = readJson(path.join(REPO, '.claude-plugin', 'plugin.json'));
 const marketplace = readJson(path.join(REPO, '.claude-plugin', 'marketplace.json'));
 const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 
+// Atlas builds carry their own line on the upstream release they're built on, such as 0.1.5-atlas.1.
+const badgeVersion = plugin.version.replaceAll('-', '--'); // shields.io writes a literal dash as two
+
 test('the plugin version is a semantic version', () => {
-  assert.match(plugin.version, /^\d+\.\d+\.\d+$/);
+  assert.match(plugin.version, /^\d+\.\d+\.\d+(-atlas\.\d+)?$/);
 });
 
 test('the marketplace lists this plugin, from this repo', () => {
@@ -21,7 +24,7 @@ test('the marketplace lists this plugin, from this repo', () => {
 });
 
 test('the README version badge matches plugin.json', () => {
-  assert.match(read('README.md'), new RegExp(`badge/version-${plugin.version.replaceAll('.', '\\.')}-`));
+  assert.match(read('README.md'), new RegExp(`badge/version-${badgeVersion.replaceAll('.', '\\.')}-`));
 });
 
 test('the changelog has an entry for this version', () => {

@@ -1,17 +1,17 @@
 {
-  "name": "floorplan",
+  "name": "atlas-floorplan",
   "owner": {
-    "name": "Hayden Smith",
-    "url": "https://github.com/haydenschmitty"
+    "name": "Atlas DevShop",
+    "url": "https://github.com/anas-atlas"
   },
   "metadata": {
-    "description": "Floorplan: an interactive map of your codebase for Claude Code."
+    "description": "Atlas DevShop's Floorplan with the build map, for Claude Code."
   },
   "plugins": [
     {
-      "name": "floorplan",
+      "name": "atlas-floorplan",
       "source": "./",
-      "description": "An interactive map of your codebase: every part, file and web request with a plain-English name and description, plus a health check, screens, guided flows and recent-work highlights.",
+      "description": "Floorplan (an interactive map of your codebase, by Hayden Smith) plus the Atlas build map: a local page where agents keep each feature build's status and you answer, approve and leave notes.",
       "category": "productivity"
     }
   ]

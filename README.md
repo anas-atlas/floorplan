@@ -11,9 +11,11 @@
 
 Claude reads your codebase and draws an interactive map of it. Every part, file and web request gets a plain-English name, and every connection between them is shown.
 
+> **Atlas DevShop build.** This fork (`atlas-floorplan`) is [Hayden Smith's Floorplan](https://github.com/haydenschmitty/floorplan) plus the Atlas **build map**: a local page where agents keep each feature build's status and you answer, approve and leave notes. See [Build map](docs/build-map.md) and the [install guide](docs/atlas-install.md).
+
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=flat-square)](https://code.claude.com/docs/en/overview)
 [![Tests](https://img.shields.io/github/actions/workflow/status/haydenschmitty/floorplan/test.yml?branch=main&style=flat-square&label=tests)](https://github.com/haydenschmitty/floorplan/actions/workflows/test.yml)
-[![Version](https://img.shields.io/badge/version-0.1.5-111?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.5--atlas.1-111?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-111?style=flat-square)](LICENSE)
 [![Node 18+](https://img.shields.io/badge/node-%E2%89%A518-111?style=flat-square)](https://nodejs.org)
 [![Zero dependencies](https://img.shields.io/badge/dependencies-0-111?style=flat-square)](#how-it-works)
@@ -140,8 +142,8 @@ Plus guided **flows** you can request in plain words, a one-minute **Start here*
 You need [Claude Code](https://code.claude.com/docs/en/overview) (the desktop app's Code tab or the CLI) and [Node.js 18+](https://nodejs.org).
 
 ```bash
-claude plugin marketplace add haydenschmitty/floorplan
-claude plugin install floorplan@floorplan
+claude plugin marketplace add anas-atlas/floorplan
+claude plugin install atlas-floorplan@atlas-floorplan
 ```
 
 Start a new session and it's ready. Installing the Claude Code CLI is recommended even if you use the desktop app, because it lets the map's Ask bar read your real code. More in [Getting started](docs/getting-started.md).

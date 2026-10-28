@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5-atlas.1 (2026-10-28)
+
+Atlas DevShop's first build on Floorplan 0.1.5. Installs as `atlas-floorplan` from this fork's own marketplace (`claude plugin marketplace add anas-atlas/floorplan`). Floorplan itself is unchanged. See [Build map](docs/build-map.md).
+
+- **Plugin renamed** to `atlas-floorplan`, so it never clashes with Hayden's `floorplan@floorplan`.
+- **Build map code under MIT**, the same license as the fork (`skills/build-map/LICENSE`).
+
 ## 0.1.5 (2026-10-28)
 
 - **Fewer false Health alarms on FastAPI:** a dependency shortcut whose own name says it checks the caller, like `AdminAccess = Annotated[dict, Depends(check)]`, now counts as a login check even when its function has a plain name.
