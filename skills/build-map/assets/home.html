@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Builds</title>
+<link rel="icon" type="image/png" href="__FAVICON__">
+<style>/*__FONTS__*/</style>
+<style>
+/* The Builds home: every build map, grouped by stage, in Floorplan's look. Each card opens the map's
+   Floorplan viewer with its build panel. Read only: answers and notes are given inside each map. */
+:root {
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --bg: #0f0f0f; --grid: #1f1f1f; --surface: #191919; --surface-hover: #1e1e1e; --raise: #232323;
+  --elev: rgba(26, 26, 26, .86); --hair: rgba(255, 255, 255, .06);
+  --text: #ececec; --text-2: #b4b4b4; --text-3: #8b8b8b; --text-4: #5c5c5c;
+  --bm: #8fb4ff; --pass: #6fd7a8; --fail: #f28b8b; --warn: #f0c36b; --recent: #4ade80;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, .035) inset, 0 12px 32px -20px rgba(0, 0, 0, .95);
+  --shadow-float: 0 0 0 1px rgba(255, 255, 255, .05), 0 24px 64px -24px rgba(0, 0, 0, .9);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13.5px; -webkit-font-smoothing: antialiased; }
+body { background-image: radial-gradient(var(--grid) 1px, transparent 1px); background-size: 24px 24px; }
+a { color: inherit; text-decoration: none; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+header { position: sticky; top: 0; z-index: 5; height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: linear-gradient(to bottom, rgba(15, 15, 15, .96) 45%, rgba(15, 15, 15, 0)); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -.01em; }
+.brand img { height: 22px; width: auto; display: block; }
+.brand .sep { color: var(--text-4); font-weight: 400; }
+.live { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12.5px; }
+.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--pass); box-shadow: 0 0 0 3px rgba(111, 215, 168, .15); }
+.live.off i { background: var(--warn); box-shadow: 0 0 0 3px rgba(240, 195, 107, .15); }
+main { max-width: 1240px; margin: 0 auto; padding: 8px 16px 64px; }
+.intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 12px 0 22px; }
+h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.025em; }
+.sum { color: var(--text-3); margin-top: 6px; line-height: 1.5; }
+.sum b { color: var(--text); font-weight: 500; }
+.stagebar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, .05); width: min(360px, 100%); gap: 2px; }
+.stagebar i { display: block; background: var(--c); }
+.notice { margin: 0 0 18px; padding: 12px 16px; border-radius: 16px; background: rgba(240, 195, 107, .08); color: #f3d79b; line-height: 1.5; }
+.notice code { font-family: var(--mono); font-size: 12px; background: rgba(0, 0, 0, .3); padding: 1px 7px; border-radius: 7px; color: var(--text); }
+section { margin-bottom: 28px; }
+section h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 13px; font-weight: 500; color: var(--text-3); }
+section h2 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+section h2 .n { color: var(--text-4); }
+section h2 button { border: 0; background: none; color: inherit; font: inherit; display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 0; cursor: pointer; }
+section h2 button:hover { color: var(--text); }
+section h2 button::after { content: "▸"; font-size: 10px; transition: transform .2s var(--ease); }
+section h2 button[aria-expanded="true"]::after { transform: rotate(90deg); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.card { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 14px; border-radius: 20px; background: var(--surface); box-shadow: var(--shadow-card);
+  transition: background .2s var(--ease), transform .2s var(--ease); animation: rise .45s var(--ease) both; }
+.card:hover { background: var(--surface-hover); transform: translateY(-1px); }
+.card:focus-visible { outline: 2px solid var(--bm); outline-offset: 2px; }
+.card .top { display: flex; align-items: flex-start; gap: 10px; }
+.card .ico { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--c) 15%, transparent); color: var(--c); }
+.card .ico svg { width: 14px; height: 14px; }
+.card .tt { flex: 1; min-width: 0; }
+.card .name { font-weight: 600; line-height: 1.35; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.card .slug { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .step { font-size: 11.5px; color: var(--text-3); white-space: nowrap; margin-top: 2px; }
+.bars { display: grid; gap: 4px; }
+.bar { height: 4px; border-radius: 999px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--c); border-radius: 999px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--text-3); }
+.pill { font-size: 11px; font-weight: 600; line-height: 1; border-radius: 999px; padding: 4px 8px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); white-space: nowrap; }
+.repo { font-family: var(--mono); font-size: 11px; color: var(--text-2); background: rgba(255, 255, 255, .05); border-radius: 999px; padding: 3px 8px; }
+.when { margin-left: auto; font-variant-numeric: tabular-nums; }
+.empty { color: var(--text-3); padding: 48px 0; text-align: center; line-height: 1.6; }
+.empty code { font-family: var(--mono); font-size: 12px; background: rgba(255, 255, 255, .06); padding: 1px 7px; border-radius: 7px; color: var(--text); }
+.err { color: #f5c2c2; font-size: 12.5px; margin: 0 0 8px; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .card { animation: none; transition: none; } }
+@media (max-width: 520px) { h1 { font-size: 24px; } .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><img src="__LOGO__" alt="Floorplan"><span class="sep">/</span><span>Builds</span></div>
+  <div class="live off" id="live"><i></i><span>Connecting</span></div>
+</header>
+<main id="app"><p class="empty">Reading your build maps</p></main>
+<script>
+(() => {
+  const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const TOKEN = (window.BM_SERVER || {}).token || '';
+  const NAMES = { grill: 'Grill', spec: 'Spec', plan: 'Grill', build: 'Build', qa: 'QA', review: 'Review', deploy: 'Deploy', quiz: 'Quiz', close: 'Close', complete: 'Complete', archive: 'Archived' };
+  // The stage groups, in the order work moves through them.
+  const GROUPS = [
+    { k: 'plan', name: 'Plan', c: '#b49cff', of: ['grill', 'spec', 'plan'] },
+    { k: 'build', name: 'Build', c: '#8fb4ff', of: ['build'] },
+    { k: 'qa', name: 'QA and review', c: '#f0c36b', of: ['qa', 'review'] },
+    { k: 'deploy', name: 'Deploy', c: '#7cc4ff', of: ['deploy', 'quiz', 'close'] },
+    { k: 'complete', name: 'Complete', c: '#6fd7a8', of: ['complete'] },
+    { k: 'archive', name: 'Archive', c: '#8b8b8b', of: ['archive'] },
+  ];
+  const groupOf = s => GROUPS.find(g => g.of.includes(s)) || GROUPS[0];
+  const ICON = '<svg class="i" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 20V9l6-5 6 5v11"/><path d="M10 20v-5h4v5"/></svg>';
+  // Per browser: which groups are folded (Archive starts folded) and the rev of each map when you last opened it.
+  const get = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch (e) { return d; } };
+  const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: this visit only */ } };
+  let folded = get('bm.home.folded', ['archive']), seen = get('bm.seen', {}), maps = null, cleanup = 0, error = '';
+  const app = document.getElementById('app'), live = document.getElementById('live');
+
+  async function load() {
+    try {
+      const r = await fetch('/api/maps', { headers: { 'x-build-map-token': TOKEN }, cache: 'no-store' }), j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.statusText);
+      maps = j.maps; cleanup = j.cleanup || 0; error = '';
+    } catch (e) { error = e.message; }
+    render();
+  }
+  const pct = (n, of) => of ? Math.round(100 * n / of) : 0;
+  function card(m, i) {
+    const g = groupOf(m.stage), done = m.stage === 'complete', fresh = seen[m.slug] !== undefined && (m.rev || 0) > seen[m.slug];
+    const flags = [
+      m.forYou && `<span class="pill" style="--c:var(--bm)">${m.forYou} for you</span>`,
+      m.drafts && `<span class="pill" style="--c:var(--text-2)">${m.drafts} not sent</span>`,
+      m.blocked && '<span class="pill" style="--c:var(--fail)">Blocked</span>',
+      m.health && m.health.important && `<span class="pill" style="--c:var(--fail)" title="Open the map to see what">${m.health.important} to fix</span>`,
+      fresh && '<span class="pill" style="--c:var(--recent)" title="Changed since you last opened it">New</span>',
+      m.repo ? `<span class="repo" title="${m.codeMap ? 'Opens on this repo\'s code map' : 'This repo has no code map yet'}">${E(m.repo)}${m.codeMap ? '' : ' · no code map'}</span>` : '<span class="repo" title="No repo linked: the map opens with its build panel only">no repo</span>',
+    ].filter(Boolean).join('');
+    const step = m.stage === 'archive' ? `Archived${m.was ? ' from ' + (NAMES[m.was] || m.was) : ''}` : NAMES[m.stage] || m.stage;
+    return `<a class="card" href="/m/${encodeURIComponent(m.slug)}" style="--c:${g.c};animation-delay:${Math.min(i * 25, 300)}ms" data-slug="${E(m.slug)}">
+      <div class="top"><span class="ico">${ICON}</span><div class="tt"><div class="name">${E(m.feature)}</div><div class="slug">${E(m.slug)}</div></div><span class="step">${E(step)}</span></div>
+      ${m.total || done ? `<div class="bars" title="${m.committed} of ${m.total} committed, ${m.prod} in production"><div class="bar"><i style="--c:#8fb4ff;width:${done ? 100 : pct(m.committed, m.total)}%"></i></div><div class="bar"><i style="--c:var(--pass);width:${done ? 100 : pct(m.prod, m.total)}%"></i></div></div>` : ''}
+      <div class="meta">${flags}<span class="when">${E(m.updated || '')}</span></div></a>`;
+  }
+  function render() {
+    if (error && !maps) { app.innerHTML = `<p class="empty">Could not read the build maps: ${E(error)}</p>`; return; }
+    if (!maps) return;
+    const ok = maps.filter(m => !m.error), bad = maps.filter(m => m.error);
+    if (!ok.length && !bad.length) { app.innerHTML = '<p class="empty">No build maps yet.<br>Create one with <code>bm new my-feature "Feature name"</code></p>'; return; }
+    const active = ok.filter(m => !['complete', 'archive'].includes(m.stage)), forYou = ok.reduce((s, m) => s + (m.forYou || 0), 0);
+    const counts = GROUPS.map(g => ({ g, n: ok.filter(m => groupOf(m.stage) === g).length })).filter(x => x.n);
+    let h = `<div class="intro"><div><h1>Builds</h1><div class="sum"><b>${active.length}</b> in progress${forYou ? ` · <b>${forYou}</b> waiting on you` : ''} · ${ok.length} maps in all</div></div>
+      <div class="stagebar" title="${counts.map(x => `${x.g.name}: ${x.n}`).join(', ')}">${counts.map(x => `<i style="--c:${x.g.c};flex:${x.n}"></i>`).join('')}</div></div>`;
+    if (cleanup) h += `<p class="notice">${cleanup} deleted map${cleanup > 1 ? 's' : ''} still ${cleanup > 1 ? 'have' : 'has'} cleanup waiting. Ask an agent to run <code>bm cleanup</code>.</p>`;
+    h += bad.map(m => `<p class="err">${E(m.slug)}: ${E(m.error)}</p>`).join('');
+    let i = 0;
+    for (const g of GROUPS) {
+      const list = ok.filter(m => groupOf(m.stage) === g); if (!list.length) continue;
+      const f = folded.includes(g.k);
+      h += `<section style="--c:${g.c}" aria-label="${E(g.name)}, ${list.length} maps"><h2><button data-fold="${g.k}" aria-expanded="${!f}"><span class="dot"></span>${E(g.name)} <span class="n">${list.length}</span></button></h2>` +
+        (f ? '' : `<div class="grid">${list.map(m => card(m, i++)).join('')}</div>`) + `</section>`;
+    }
+    app.innerHTML = h;
+  }
+  app.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-fold]');
+    if (b) { const k = b.dataset.fold; folded = folded.includes(k) ? folded.filter(x => x !== k) : [...folded, k]; put('bm.home.folded', folded); render(); return; }
+    const c = ev.target.closest('.card');
+    if (c) { const m = (maps || []).find(x => x.slug === c.dataset.slug); if (m) { seen[m.slug] = m.rev || 0; put('bm.seen', seen); } }
+  });
+  // Live: any change to a map file (an agent running bm, an answer from a map page) refreshes the cards.
+  if (typeof EventSource !== 'undefined') {
+    const es = new EventSource('/api/events?token=' + encodeURIComponent(TOKEN));
+    let t = null;
+    es.onopen = () => { live.classList.remove('off'); live.lastChild.textContent = 'Live'; };
+    es.onerror = () => { live.classList.add('off'); live.lastChild.textContent = 'Reconnecting'; };
+    es.addEventListener('map', () => { clearTimeout(t); t = setTimeout(load, 150); });
+  }
+  load();
+})();
+</script>
+</body>
+</html>

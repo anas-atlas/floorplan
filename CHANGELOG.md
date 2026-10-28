@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0-atlas.1 (2026-10-28)
+
+Floorplan's viewer becomes the build map page. Maps stay in `~/build-maps`, the map format is unchanged, and every `bm` command prints exactly what it did before. See [Build map](docs/build-map.md).
+
+- **Builds home** on 127.0.0.1:4330, in Floorplan's design: every map grouped by stage, with what waits on you, blockers, health and its repo. It updates live as agents run `bm`.
+- **Each map opens in Floorplan's viewer** on its repo's code map, with a **Build panel**: stage strip, tickets, Inbox with the note box, Decisions with one-click answers, QA with a Pass, Fail and Open button on each step, Deploy checks and links, modules, and Activity. A map with no repo opens with the panel and an empty canvas.
+- **Feature lens:** the map's modules light up on the code graph, matched by name, and the rest fades.
+- **One write endpoint** for notes, answers and QA verdicts, token checked, through the same code as `bm`. Answers still wait as drafts until Send.
+- **One server for every repo:** the home, each map's viewer and its Ask bar, flows and live reload. 127.0.0.1 only, Host and Origin checks, and a per-launch token on every API call (each map page's token works for that map only).
+- **Dropped:** dragging cards between stages (agents move stages with `bm stage`), the build diagram and the Code map tab (the viewer is the code map now).
+- **`bm open --classic`** keeps the 0.1.x page on 127.0.0.1:4331 for this release only.
+- **Tests** for the panel's data against `bm show`, the write endpoint, the home, the viewer the server builds, and the guard against committed maps (which now also covers the server's state files).
+
 ## 0.1.5-atlas.1 (2026-10-28)
 
 Atlas DevShop's first build on Floorplan 0.1.5. Installs as `atlas-floorplan` from this fork's own marketplace (`claude plugin marketplace add anas-atlas/floorplan`). Floorplan itself is unchanged. See [Build map](docs/build-map.md).

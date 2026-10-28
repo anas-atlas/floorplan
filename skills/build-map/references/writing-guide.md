@@ -4,9 +4,9 @@ The owner reads the map, not chat, often on a phone between calls. Everything yo
 
 ## Modules
 
-- **Id = the code's name.** The class, component, Flow or object exactly as it is in the repo: `OrderSearchService`, `orderSearch LWC`, `Renewal_Reminder_Daily`. The Code map tab finds the file by this name. Use a phrase only for work that is not one file ("Prod evidence (audit trail)").
+- **Id = the code's name.** The class, component, Flow or object exactly as it is in the repo: `OrderSearchService`, `orderSearch LWC`, `Renewal_Reminder_Daily`. The Feature lens finds the file by this name. Use a phrase only for work that is not one file ("Prod evidence (audit trail)").
 - `--what`: one line, what it does for the feature, not how. "Finds orders by number, email or phone", not "SOQL with dynamic WHERE".
-- `--sub`: 4 or 5 words for the diagram box.
+- `--sub`: 4 or 5 words for the diagram box (classic page).
 - `--group`: 2 or 3 words naming what the modules do together (Intake, Search, Config and review).
 - `--uses`: the module ids it calls or reads. Leave it empty rather than guess.
 

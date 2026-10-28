@@ -27,4 +27,6 @@ test('no tracked file in this repo is a build map', (t) => {
   const maps = files.filter(f => /build-maps?\//.test(f) && f.endsWith('.json') && !f.startsWith('skills/build-map/scripts/'))
     .concat(files.filter(f => f.endsWith('.json') && fs.existsSync(path.join(REPO, f)) && fs.statSync(path.join(REPO, f)).size < 5 * 1024 * 1024 && looksLikeMap(fs.readFileSync(path.join(REPO, f), 'utf8'))));
   assert.deepEqual([...new Set(maps)], [], 'build maps belong in ~/build-maps, never in this repo');
+  // nor the files the CLI and the server keep next to them (repo paths, the server's token, cleanup requests)
+  assert.deepEqual(files.filter(f => /(^|\/)\.(repos|server|server-classic|cleanup)\.json$/.test(f)), []);
 });

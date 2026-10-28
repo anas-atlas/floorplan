@@ -389,7 +389,7 @@ const codeOf = id => { const cm = CODE[slug]; return cm && cm.matches && cm.matc
 const changedMods = () => { const ls = news().map(l => String(l[1])); return new Set(mods().filter(m => ls.some(t => t.includes(m.id))).map(m => m.id)); };
 let slug = '', D = null, maps = null, problem = '', HEALTH = [];
 const app = document.getElementById('app');
-if (location.port !== '4330') { document.getElementById('copytag').hidden = false; }
+if (!['4330', '4331'].includes(location.port)) { document.getElementById('copytag').hidden = false; }
 
 async function api(path, init) {
   const r = await fetch(path, init), j = await r.json().catch(() => ({}));

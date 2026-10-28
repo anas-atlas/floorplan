@@ -46,13 +46,13 @@ bm list
 bm open
 ```
 
-`bm list` prints your maps (none yet on a new laptop). `bm open` opens the build map page at http://127.0.0.1:4330.
+`bm list` prints your maps (none yet on a new laptop). `bm open` opens the Builds home at http://127.0.0.1:4330: every map by stage, each opening in Floorplan's viewer with its Build panel.
 
 ## Using it
 
 - **Build maps:** at the start of a feature build, Claude asks whether the work gets a map, then keeps it updated. You read and answer on the page. Maps are files in `~/build-maps/`; they never go into a repo.
-- **Code maps:** in a client repo, ask Claude **"make me a floorplan of this app"**. Once a repo has one, its build maps get a **Code map** tab that shows each module on the code.
-- Name modules after their code (the Apex class, LWC, Flow or object), so the Code map tab can find them.
+- **Code maps:** in a client repo, ask Claude **"make me a floorplan of this app"**. Once a repo has one, its build maps open on that code map, and the **Feature lens** lights up each module on it.
+- Name modules after their code (the Apex class, LWC, Flow or object), so the Feature lens can find them.
 
 ## Updating
 
@@ -68,7 +68,7 @@ Then update **atlas-floorplan** from the Code tab's plugin list (or `claude plug
 |---|---|
 | `bm: command not found` | Step 3, then open a new terminal |
 | `bm open` says port 4330 is in use | An older build map page is running. Stop it (`lsof -iTCP:4330` shows its process) and run `bm open` again |
-| No Code map tab on a map | Run `bm here <map>` inside the repo, and make sure the repo has a floorplan |
+| A map opens with an empty canvas | It has no repo linked, or its repo has no floorplan yet: run `bm here <map>` inside the repo, and make sure the repo has a floorplan |
 | "The code map lags the branch" | Ask Claude in the repo to "update the floorplan" |
 
 More: [Build map](build-map.md), [Floorplan's getting started](getting-started.md).

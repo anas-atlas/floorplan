@@ -1,6 +1,6 @@
 # Build map
 
-The build map is Atlas DevShop's addition to this fork. It keeps one JSON file per feature build in `~/build-maps/` (or `BUILD_MAP_DIR`). Agents update it through the `bm` CLI, and the owner reads it, answers and leaves notes on a local page at http://127.0.0.1:4330.
+The build map is Atlas DevShop's addition to this fork. It keeps one JSON file per feature build in `~/build-maps/` (or `BUILD_MAP_DIR`). Agents update it through the `bm` CLI, and the owner reads it, answers and leaves notes on a local page at http://127.0.0.1:4330: the Builds home, and each map as Floorplan's own viewer with a Build panel.
 
 It ships as a second skill in this plugin, next to Floorplan, in `skills/build-map/`:
 
@@ -11,15 +11,20 @@ skills/build-map/
   scripts/
     bm.cjs               the CLI agents use
     lib.cjs              the map store: one JSON per feature, atomic writes, a lock
-    server.cjs           the owner's page on 127.0.0.1:4330
-    open.cjs             bm open: start or reuse the page
+    server.cjs           the owner's page on 127.0.0.1:4330: the Builds home, every map's viewer, the write endpoint
+    page.cjs             puts Floorplan's viewer together from the plugin's assets (as build.mjs does)
+    ask.cjs              the viewer's Ask bar for every repo (a port of floorplan's serve.mjs)
+    open.cjs             bm open: start or reuse the page (--classic: the 0.1.x page)
+    classic-server.cjs   the 0.1.x page on 4331, for one release
     health.cjs           bm health and the Health row
     repos.cjs            which checkout a map belongs to, and the CLAUDE.local.md pointer
     code.cjs             the link to the repo's Floorplan map
     shim.cjs             bm install-shim (~/.local/bin/bm)
     template.json        a new, empty map
-  assets/index.html      the page
+  assets/home.html       the Builds home
+  assets/classic.html    the 0.1.x page, for one release
   tests/                 run with Floorplan's tests by npm test
+skills/floorplan/assets/ui/60-build.js   the Build panel and the Feature lens, inside Floorplan's viewer
 ```
 
 ## Where things live
@@ -34,17 +39,29 @@ skills/build-map/
 
 ## The page
 
-`bm open` starts the page on http://127.0.0.1:4330 (or reuses it) and opens it. It listens on 127.0.0.1 only; `--host` stays an explicit opt-in. It checks Host and Origin on every request, as before, and the routes that read code or start a process also need a token made at launch and given only to the page.
+`bm open` starts the page on http://127.0.0.1:4330 (or reuses it, restarting it when the plugin brings a newer one) and opens the **Builds home**: every map grouped by stage (Plan, Build, QA and review, Deploy, Complete, Archive), with what waits on you, blockers, health, and whether it has a repo. `bm open <map>` goes straight to one map.
 
-On a map:
+A map opens as **Floorplan's viewer** on its repo's code map, with the **Build panel** open (`ui/60-build.js`). A map with no repo, or whose repo has no floorplan yet, opens in the same viewer with the panel and an empty canvas. The panel shows:
 
-- **Health** lists what is wrong, stale or stuck (also `bm health`). Board cards count the important ones.
-- **Since you last looked:** modules changed since you last opened the map get a green ring; the card says New.
-- **Code map** tab, when the map is linked to a repo: each module matched by name to a file on the repo's Floorplan map, what that file uses and what uses it (imports, plus names found in Apex, triggers, Flows and components), a warning when the code map lags the branch, and the Floorplan map itself, opened on that file. Its Ask bar runs on Floorplan's own server with Floorplan's token; the build map page never runs Claude. A `code` link on each module in the Build view goes straight there.
+- the stage strip (Grill to Complete), branch, org, rev, tickets and the map's health;
+- **Inbox**: the agents' Now lines with who and blocked, your notes, and the note box;
+- **Decisions**: the scope, open items with one-click options, then sent and decided;
+- **QA**: the latest run, each step with Pass, Fail and Open buttons, and earlier runs;
+- **Deploy**: checks and links (local files open read-only, from ~/Documents/Atlas and the maps folder only);
+- the modules, each a click from its file on the graph;
+- **Activity**: the log, newest first, and the last send.
+
+The **Feature lens** lights up the map's modules on the code graph (matched by name, the same match `bm code` shows) and fades everything else; the parts that hold them say how many. The Build button's count is what waits on you.
+
+Notes, answers and QA verdicts go through one write endpoint, `POST /api/map/<map>/write`, which runs `lib.applyMany`, the code `bm` uses, tagged `you`. It accepts only those ops (drafts, send, order, taking an answer back, QA steps). Notes and answers stay drafts until you press Send, so `bm wait` wakes the agent once per batch. Stages are not moved on the page: agents move them with `bm stage`.
+
+One server answers for every repo: the home, every map's viewer, its Ask bar (`claude -p` in the repo with read-only tools, as Floorplan's own `serve.mjs` does), its flows and its live reload when the code map is rebuilt. It listens on 127.0.0.1 only (`--host` stays an explicit opt-in) and checks Host and Origin on every request. Every API call needs a token made at launch: the home gets it, and each map page gets one derived from it that works for that map only. The page assembles the viewer from the plugin's own `viewer.html` and `ui/*.js` (a test checks it matches what `build.mjs` writes), so a repo built with an older plugin still gets the current panel.
+
+`bm open --classic` opens the 0.1.x page on 127.0.0.1:4331 for one release, then it goes.
 
 ## Linking a map to its repo
 
-There is no repo field on a map. When an agent runs `bm` inside a checkout whose branch is the map's branch, the checkout is remembered in `.repos.json`, its CLAUDE.local.md gets the pointer block, and every module change rewrites one task in `<repo>/floorplan/recent-work.json` (marked `"source": "build-map:<map>"`, other tasks kept) and rebuilds the code map in the background, so both pages light up the same files. Maps on main or master, or with no branch, are linked with `bm here <map>` run in the repo.
+There is no repo field on a map. When an agent runs `bm` inside a checkout whose branch is the map's branch, the checkout is remembered in `.repos.json`, its CLAUDE.local.md gets the pointer block, and every module change rewrites one task in `<repo>/floorplan/recent-work.json` (marked `"source": "build-map:<map>"`, other tasks kept) and rebuilds the code map in the background, so the code map's Recent work and the Feature lens agree. Maps on main or master, or with no branch, are linked with `bm here <map>` run in the repo.
 
 Modules point at code by name: use the class, component, Flow or object name as the module id. `bm code <map>` shows what matched.
 
@@ -54,11 +71,11 @@ Monthly: fetch upstream on a branch, take only releases at least two weeks old, 
 
 ## Changes to upstream files
 
-Everything Atlas adds lives in `skills/build-map/` and in `docs/` pages that upstream doesn't have (`docs/build-map.md`, `docs/atlas-install.md`). These are the only upstream files we edit, so a merge from upstream can only conflict here:
+Everything Atlas adds lives in `skills/build-map/`, in one new file in Floorplan's own feature folder (`skills/floorplan/assets/ui/60-build.js`, which reaches the viewer only through `window.Floorplan` and does nothing outside the build map server), in `tests/page.test.mjs`, and in `docs/` pages that upstream doesn't have (`docs/build-map.md`, `docs/atlas-install.md`). The viewer, `serve.mjs` and `build.mjs` are not edited. These are the only upstream files we edit, so a merge from upstream can only conflict here:
 
 | File | What we changed |
 |---|---|
-| `.claude-plugin/plugin.json` | name `atlas-floorplan`, version `0.1.5-atlas.N`, author, homepage, description |
+| `.claude-plugin/plugin.json` | name `atlas-floorplan`, version `<upstream>-atlas.N`, author, homepage, description |
 | `.claude-plugin/marketplace.json` | marketplace and plugin name `atlas-floorplan`, owner Atlas DevShop |
 | `README.md` | a one-line Atlas note under the title, the version badge, the install commands |
 | `CHANGELOG.md` | one entry per Atlas release, on top |

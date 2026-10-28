@@ -1,7 +1,7 @@
 {
   "name": "atlas-floorplan",
-  "version": "0.1.5-atlas.1",
-  "description": "Atlas DevShop's build of Floorplan: an interactive map of your codebase (every part, file and web request with a plain-English name and description, a health check, screens, guided flows and recent-work highlights), plus the build map, a local page where agents keep a feature build's status and the owner answers, approves and leaves notes.",
+  "version": "0.2.0-atlas.1",
+  "description": "Atlas DevShop's build of Floorplan: an interactive map of your codebase (every part, file and web request with a plain-English name and description, a health check, screens, guided flows and recent-work highlights), plus the build map: agents keep each feature build's status, and the owner reads, answers and approves in Floorplan's viewer, beside the code.",
   "author": {
     "name": "Atlas DevShop",
     "url": "https://github.com/anas-atlas"
