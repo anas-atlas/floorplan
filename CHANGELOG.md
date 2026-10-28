@@ -17,6 +17,7 @@ Atlas DevShop's first build on Floorplan 0.1.5. Installs as `atlas-floorplan` fr
 - **One story of what changed:** module changes on a build map also mark those files as recent work on the code map (`floorplan/recent-work.json`, other tasks kept), and the code map rebuilds itself.
 - **Maps find their repo at run time:** running `bm` in a checkout on the map's branch links them (`bm here <map>` for maps on main); `bm code <map>` shows the matches.
 - **Writing guide** for everything agents put on a map (`skills/build-map/references/writing-guide.md`).
+- **Install guide** for the team: [docs/atlas-install.md](docs/atlas-install.md).
 - **Tests for the build map** run with Floorplan's under `npm test`: the CLI, repo linking, the server's checks and the launcher.
 
 ## 0.1.5 (2026-10-28)
