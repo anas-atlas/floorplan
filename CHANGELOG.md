@@ -13,6 +13,9 @@ Atlas DevShop's first build on Floorplan 0.1.5. Installs as `atlas-floorplan` fr
 - **Since you last looked:** modules changed since you last opened a map get a green ring and a Changed tag, and its board card says New.
 - **`bm open [map]`** starts the page on 127.0.0.1:4330 (or reuses it, restarting it when the plugin brings a newer one), opens the browser, and stops it 4 hours after the last tab closes.
 - **Sessions find the map on their own:** a checkout linked to a map gets a short block in its CLAUDE.local.md (its own markers, next to Floorplan's, kept out of git through `.git/info/exclude`).
+- **Code map tab:** a map linked to a repo shows each module on the repo's Floorplan map, matched by name (no new map field), with what it uses and what uses it (imports, plus names in Apex, triggers, Flows and components), a warning when the code map lags the branch, and the map itself opened on that file. A `code` link on each module in the Build view goes there. The Ask bar stays on Floorplan's own server and token.
+- **One story of what changed:** module changes on a build map also mark those files as recent work on the code map (`floorplan/recent-work.json`, other tasks kept), and the code map rebuilds itself.
+- **Maps find their repo at run time:** running `bm` in a checkout on the map's branch links them (`bm here <map>` for maps on main); `bm code <map>` shows the matches.
 - **Writing guide** for everything agents put on a map (`skills/build-map/references/writing-guide.md`).
 - **Tests for the build map** run with Floorplan's under `npm test`: the CLI, repo linking, the server's checks and the launcher.
 

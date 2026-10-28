@@ -100,3 +100,13 @@ test('Floorplan\'s own block in CLAUDE.local.md is left alone', () => {
   bm(dir, ['stage', 'x', 'complete'], { cwd: root });
   assert.equal(fs.readFileSync(path.join(root, 'CLAUDE.local.md'), 'utf8').trim(), theirs.trim(), 'a finished map drops out of the block');
 });
+
+test('the code map lags the branch once commits land after it was built', () => {
+  const root = gitRepo('feature/lag', { 'a.cls': 'class A {}' });
+  const head = git(root, 'rev-parse', 'HEAD');
+  const g = { meta: { generatedAt: 'then', repos: [{ path: '.', branch: 'feature/lag', head }] }, files: [] };
+  assert.equal(code.staleness(root, g).lags, false);
+  fs.writeFileSync(path.join(root, 'b.cls'), 'class B {}'); git(root, 'add', '-A'); git(root, 'commit', '-q', '-m', 'more');
+  const st = code.staleness(root, g);
+  assert.deepEqual([st.lags, st.commits, st.files], [true, 1, 1]);
+});

@@ -93,6 +93,21 @@ h1 { font-size: 20px; margin: 0; text-wrap: balance; }
 .chk .tt { flex: 1; min-width: 0; } .chk .val { font-size: 13px; color: var(--muted); }
 
 .pane { display: grid; gap: 10px; }
+/* Code map tab: modules on the left with what each uses, the repo's Floorplan map below */
+.codeframe { padding-block: 0 40px; } .codeframe[hidden] { display: none; }
+.codeframe iframe { width: 100%; height: min(78vh, 900px); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.cmods { display: grid; gap: 2px; }
+.cmod { display: flex; gap: 8px; align-items: baseline; width: 100%; text-align: left; padding: 6px 8px; border-radius: 6px; font-size: 15px; }
+.cmod:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.cmod[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cmod .tt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cmod .val { font: 12px var(--f-mono); color: var(--muted); overflow-wrap: anywhere; text-align: right; max-width: 55%; }
+.cmod.none .val { color: var(--faint); }
+.nb { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.nb h4 { margin: 0 0 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.nb p { margin: 2px 0; font-size: 14px; overflow-wrap: anywhere; }
+.nb .via { font: 11px var(--f-mono); color: var(--faint); }
+.codelink { font: 600 11px var(--f-mono); color: var(--accent); padding: 0 4px; }
 /* console: tabs */
 .tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--line); }
 .tab { padding: 8px 0; margin-bottom: -1px; color: var(--muted); border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 6px; }
@@ -298,6 +313,8 @@ h1 { font-size: 20px; margin: 0; text-wrap: balance; }
 <body>
 <div class="copytag" id="copytag" hidden><span class="long">Design copy: answers here never reach the real board (4330)</span><span class="short">Design copy, not the real board</span></div>
 <div class="wrap" id="app"></div>
+<!-- The code map stays outside #app, so the page's re-renders never reload it. -->
+<div class="wrap wide codeframe" id="codeframe" hidden><iframe title="Code map" referrerpolicy="no-referrer"></iframe></div>
 <script>
 const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const A = x => Array.isArray(x) ? x : [];
@@ -345,7 +362,7 @@ const linkTo = (l, t) => {
 };
 
 // View state is per browser tab; the map itself lives in ~/build-maps/<name>.json.
-const ui = { msg: '', live: false, tab: {}, exp: {}, del: false, view: {}, dsel: {} };
+const ui = { msg: '', live: false, tab: {}, exp: {}, del: false, view: {}, dsel: {}, csel: {} };
 // Folded board columns are a per-browser convenience; Archive starts folded.
 const FOLD_KEY = 'bm.folded';
 let folded = (() => { try { const v = JSON.parse(localStorage.getItem(FOLD_KEY)); return Array.isArray(v) ? v : ['archive']; } catch (e) { return ['archive']; } })();
@@ -357,6 +374,10 @@ function toggleFold(k) {
 // What you last saw of each map (its rev), so changes since then get a green ring. Per browser, like the folds.
 const SEEN_KEY = 'bm.seen';
 let seen = (() => { try { const v = JSON.parse(localStorage.getItem(SEEN_KEY)); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } })();
+const CODE = {}, NB = {}; // per map: what the server knows of its repo's code map; per file: what it uses and what uses it
+const TOKEN = (window.BM_SERVER || {}).token || '';
+const codeApi = (p, init = {}) => api(p, { ...init, headers: { ...(init.headers || {}), 'x-build-map-token': TOKEN } });
+async function loadCode(s) { try { CODE[s] = await codeApi('/api/code/' + s); } catch (e) { CODE[s] = { repo: null }; } if (s === slug) render(); }
 const since = {}; // the rev this visit started from, per map: everything after it is new to you
 function markSeen(s, rev) {
   if (since[s] === undefined) since[s] = seen[s] === undefined ? rev : seen[s];
@@ -364,6 +385,7 @@ function markSeen(s, rev) {
 }
 // Changes after that rev by anyone but you, and the modules they name.
 const news = () => A(D.log).filter(l => (l[3] || 0) > (since[slug] ?? D.rev) && l[2] !== 'you');
+const codeOf = id => { const cm = CODE[slug]; return cm && cm.matches && cm.matches[id]; };
 const changedMods = () => { const ls = news().map(l => String(l[1])); return new Set(mods().filter(m => ls.some(t => t.includes(m.id))).map(m => m.id)); };
 let slug = '', D = null, maps = null, problem = '', HEALTH = [];
 const app = document.getElementById('app');
@@ -378,7 +400,7 @@ async function load() {
   try {
     slug = decodeURIComponent((location.hash.match(/^#\/([a-z0-9_-]+)/) || [])[1] || '');
     problem = '';
-    if (slug) { const j = await api('/api/map/' + slug); D = j.map; HEALTH = A(j.health); markSeen(slug, D.rev || 0); if (j.warnings.length) problem = 'This map has problems: ' + j.warnings.join('; '); }
+    if (slug) { const j = await api('/api/map/' + slug); D = j.map; HEALTH = A(j.health); markSeen(slug, D.rev || 0); if (!CODE[slug]) loadCode(slug); if (j.warnings.length) problem = 'This map has problems: ' + j.warnings.join('; '); }
     else { D = null; maps = (await api('/api/maps')).maps; }
   } catch (e) { D = null; problem = e.message; }
   render();
@@ -515,17 +537,52 @@ function renderMap() {
   // While grilling, grill questions are answered in the Grill view; after it, any still open come to the Inbox.
   const inbox = all.filter(d => !d.grill || cur !== 'grill'), nInbox = inbox.filter(d => stateOf(d) === 'open').length;
   const nStep = view === 'grill' && cur === 'grill' ? all.filter(d => d.grill && stateOf(d) === 'open').length : 0;
-  const tabs = [['inbox', 'Inbox', nInbox], ['step', FLOW_NAMES[view], nStep]];
+  const cm = CODE[slug] || {}, tabs = [['inbox', 'Inbox', nInbox], ['step', FLOW_NAMES[view], nStep], ...(cm.repo ? [['code', 'Code map', 0]] : [])];
   let tab = ui.tab[slug];
   // Pick a sensible tab on arrival, then stay on it: answering the last item must not jump you elsewhere.
   if (!tabs.some(t => t[0] === tab)) tab = ui.tab[slug] = nInbox ? 'inbox' : 'step';
-  const body = tab === 'inbox' ? itemsTab(inbox, false) : stepView(view, cur, all);
+  const body = tab === 'inbox' ? itemsTab(inbox, false) : tab === 'code' ? codeTab(cm) : stepView(view, cur, all);
   return `<div class="head"><a class="back" href="#/" title="All maps" aria-label="All maps">${icon('back')}</a><h1>${E(D.feature)}</h1>` +
     `<button type="button" class="ib danger" data-act="del" data-key="del" title="Delete this map" aria-label="Delete this map" aria-expanded="${ui.del}">${icon('trash')}</button></div>` +
     stepBar(cur, view) + (ui.del ? confirmDelete() : '') + glance() +
     (problem || ui.msg ? `<p class="hint bad" role="alert">${E(problem || ui.msg)}</p>` : '') +
     `<div class="tabs" role="tablist">` + tabs.map(([k, l, n]) => `<button class="tab" role="tab" data-act="tab" data-k="${k}" data-key="tab:${k}" aria-selected="${tab === k}">${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('') + `</div>` +
     `<div class="pane" role="tabpanel">${body}</div>` + sendBar();
+}
+// Code map: the build map's modules matched by name to files on the repo's Floorplan map, which shows below.
+function codeTab(cm) {
+  if (!cm.map) return `<p class="empty">No code map in ${E(cm.repo)} yet. Ask Claude in that repo: make me a floorplan of this app. It shows here once it is built.</p>`;
+  const ms = mods(), sel = ui.csel[slug], hit = sel && cm.matches[sel], st = cm.stale;
+  let h = `<p class="hint">${E(cm.project || 'Code map')}, from ${E(cm.repo)}${cm.branch ? ' on ' + E(cm.branch) : ''}</p>`;
+  if (st && st.lags) h += `<div class="chk hl-important">${icon('alert')}<span class="tt">The code map lags the branch: ${st.files} file${st.files === 1 ? '' : 's'} changed in ${st.commits} commit${st.commits === 1 ? '' : 's'} since it was built${st.builtBranch && st.builtBranch !== st.branch ? ' on ' + E(st.builtBranch) : ''}. Ask Claude in the repo to update the floorplan.</span></div>`;
+  h += `<div class="cmods" role="list">` + ms.map(m => { const x = cm.matches[m.id];
+    return `<button type="button" role="listitem" class="cmod${x ? '' : ' none'}" data-act="csel" data-k="${E(m.id)}" data-key="csel:${E(m.id)}" aria-pressed="${sel === m.id}"${x ? '' : ' disabled'}><span class="tt">${E(m.id)}</span><span class="val">${x ? E(x.file.split('/').slice(-2).join('/')) : 'no file by this name'}</span></button>`; }).join('') + `</div>`;
+  if (hit) {
+    const nb = NB[cm.repo + '|' + hit.file], list = (t, xs) => `<div><h4>${t}</h4>${xs.length ? xs.map(x => `<p>${E(x.name)} <span class="via">${E(x.file.split('/').slice(-2).join('/'))}${x.via === 'name' ? ', by name' : ''}</span></p>`).join('') : '<p class="sub">Nothing found</p>'}</div>`;
+    h += nb ? `<div class="nb">${list('Uses', nb.uses)}${list('Used by', nb.usedBy)}</div>` : '<p class="hint">Reading what it uses</p>';
+  }
+  h += cm.url ? `<p class="hint"><a href="${E(cm.url + (hit ? hit.link : ''))}" target="_blank" rel="noopener">Open the code map in a new tab</a>. Its Ask bar answers questions about the code.</p>`
+    : `<div class="row"><button type="button" class="tb" data-act="cstart" data-key="cstart">Start the code map</button><span class="hint">Runs the repo's Floorplan page on this computer only.</span></div>`;
+  return h;
+}
+// Shows the repo's Floorplan page under the Code map tab, on the selected module's file. Only the address changes, so it never reloads.
+function syncFrame(tab) {
+  const box = document.getElementById('codeframe'), f = box.querySelector('iframe'), cm = D && CODE[slug];
+  const on = tab === 'code' && cm && cm.url;
+  box.hidden = !on; if (!on) return;
+  const hit = ui.csel[slug] && cm.matches[ui.csel[slug]], want = cm.url + '/' + (hit ? hit.link : '');
+  if (f.dataset.src !== want) { f.dataset.src = want; f.src = want; }
+}
+async function pickCode(id) {
+  const cm = CODE[slug], hit = cm && cm.matches[id]; ui.csel[slug] = id; ui.tab[slug] = 'code'; render();
+  const k = cm.repo + '|' + (hit && hit.file);
+  if (hit && !NB[k]) { try { NB[k] = await codeApi(`/api/code/${slug}/neighbors?file=${encodeURIComponent(hit.file)}`); } catch (e) { NB[k] = { uses: [], usedBy: [] }; } render(); }
+}
+async function startCode() {
+  ui.msg = 'Starting the code map'; render();
+  try { const r = await codeApi(`/api/code/${slug}/serve`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); ui.msg = r.url ? '' : 'The code map did not start.'; }
+  catch (e) { ui.msg = 'The code map did not start: ' + e.message; }
+  await loadCode(slug);
 }
 // Two quiet rows under the steps: what changed since you last looked, and the map's health check.
 function glance() {
@@ -771,7 +828,7 @@ const VIEWS = {
     const work = all.filter(n => n.at === today), old = all.filter(n => n.at !== today);
     return diagram + `<div class="lanes">` + Object.entries(by).map(([k, l]) => { const c = l.filter(m => m.code === 'committed').length;
       return `<div class="lanec"><h3>${E(k)}<span>${c} of ${l.length} committed</span></h3><div class="bar"><i style="--c:var(--s-committed);width:${Math.round(100 * c / l.length)}%"></i></div>` +
-        l.map(m => `<div class="line${chg.has(m.id) ? ' chg' : ''}"><span class="tt">${E(m.id)}</span>${chg.has(m.id) ? '<span class="chg-tag">Changed</span>' : ''}${stateIcon(m)}</div>`).join('') + '</div>'; }).join('') + '</div>' +
+        l.map(m => `<div class="line${chg.has(m.id) ? ' chg' : ''}"><span class="tt">${E(m.id)}</span>${chg.has(m.id) ? '<span class="chg-tag">Changed</span>' : ''}${codeOf(m.id) ? `<button type="button" class="codelink" data-act="code" data-k="${E(m.id)}" data-key="code:${E(m.id)}" title="Show ${E(codeOf(m.id).file)} on the code map">code</button>` : ''}${stateIcon(m)}</div>`).join('') + '</div>'; }).join('') + '</div>' +
       (old.length ? liteRow('v:old', 'clock', 'Older agent notes, may be stale', String(old.length), old.map(n => `<p>${E(n.t)}</p>`).join('')) : '') +
       (work.length ? `<p class="sec">Agent is working on</p><div class="list">${work.map(n => `<div class="chk">${icon('refresh')}<span class="tt">${E(n.t)}</span></div>`).join('')}</div>` : '');
   },
@@ -836,6 +893,7 @@ function render() {
   if (fi) { fi.focus({ preventScroll: true }); try { fi.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
   else if (f) { const el = app.querySelector(`[data-key="${f}"]`); if (el) el.focus({ preventScroll: true }); }
   scrollTo(0, y);
+  syncFrame(D ? ui.tab[slug] : '');
   const strip = app.querySelector('.steps'), here = strip && app.querySelector('.step[aria-current], .step.sel');
   if (strip && here && strip.scrollWidth > strip.clientWidth) strip.scrollLeft = here.offsetLeft - strip.offsetLeft - (strip.clientWidth - here.offsetWidth) / 2;
 }
@@ -845,7 +903,9 @@ app.addEventListener('click', ev => {
   const b = ev.target.closest('[data-act]'); if (b && !D && b.dataset.act === 'col') { toggleFold(b.dataset.k); return; }
   if (!b || !D) return;
   const act = b.dataset.act;
-  if (act === 'tab') { ui.tab[slug] = b.dataset.k; render(); }
+  if (act === 'tab') { ui.tab[slug] = b.dataset.k; render(); if (b.dataset.k === 'code') loadCode(slug); }
+  else if (act === 'csel' || act === 'code') pickCode(b.dataset.k);
+  else if (act === 'cstart') startCode();
   else if (act === 'exp') { const k = b.dataset.k; ui.exp[k] = !ui.exp[k]; render(); if (ui.exp[k]) { const n = document.getElementById('nt-' + k.slice(1)); if (n && k[0] === 'd' && !A(D.plan.decisions)[+k.slice(1)].opts && (A(D.plan.decisions)[+k.slice(1)].kind || 'decision') === 'decision') n.focus(); } }
   else if (act === 'pick') {
     const d = A(D.plan && D.plan.decisions)[+b.dataset.i]; if (!d) return;
