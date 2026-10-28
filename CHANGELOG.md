@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.5-atlas.1 (2026-10-28)
+
+Atlas DevShop's first build on Floorplan 0.1.5. Installs as `atlas-floorplan` from this fork's own marketplace (`claude plugin marketplace add anas-atlas/floorplan`). Floorplan itself is unchanged. See [Build map](docs/build-map.md).
+
+- **Plugin renamed** to `atlas-floorplan`, so it never clashes with Hayden's `floorplan@floorplan`.
+- **Build map code under MIT**, the same license as the fork (`skills/build-map/LICENSE`).
+- **The build map moves in** as its own skill, `skills/build-map/`: the `bm` CLI, the page's server on 127.0.0.1:4330 and the page. Maps stay in `~/build-maps` and the JSON format is unchanged, so existing maps read exactly as before.
+- **`bm` on the PATH:** `bm install-shim` writes a small launcher to `~/.local/bin/bm` that always runs the installed plugin's CLI.
+- **No map can be committed here:** a test fails if any tracked file in this public repo is a build map.
+- **Health check for maps:** `bm health` and a Health row on each map list what is wrong, stale or stuck (a stage past build with modules not committed, answers sent but not applied, a map idle for a week, old "working on" lines). Board cards show how many are important.
+- **Since you last looked:** modules changed since you last opened a map get a green ring and a Changed tag, and its board card says New.
+- **`bm open [map]`** starts the page on 127.0.0.1:4330 (or reuses it, restarting it when the plugin brings a newer one), opens the browser, and stops it 4 hours after the last tab closes.
+- **Sessions find the map on their own:** a checkout linked to a map gets a short block in its CLAUDE.local.md (its own markers, next to Floorplan's, kept out of git through `.git/info/exclude`).
+- **Code map tab:** a map linked to a repo shows each module on the repo's Floorplan map, matched by name (no new map field), with what it uses and what uses it (imports, plus names in Apex, triggers, Flows and components), a warning when the code map lags the branch, and the map itself opened on that file. A `code` link on each module in the Build view goes there. The Ask bar stays on Floorplan's own server and token.
+- **One story of what changed:** module changes on a build map also mark those files as recent work on the code map (`floorplan/recent-work.json`, other tasks kept), and the code map rebuilds itself.
+- **Maps find their repo at run time:** running `bm` in a checkout on the map's branch links them (`bm here <map>` for maps on main); `bm code <map>` shows the matches.
+- **Writing guide** for everything agents put on a map (`skills/build-map/references/writing-guide.md`).
+- **Install guide** for the team: [docs/atlas-install.md](docs/atlas-install.md).
+- **Tests for the build map** run with Floorplan's under `npm test`: the CLI, repo linking, the server's checks and the launcher.
+
 ## 0.1.5 (2026-10-28)
 
 - **Fewer false Health alarms on FastAPI:** a dependency shortcut whose own name says it checks the caller, like `AdminAccess = Annotated[dict, Depends(check)]`, now counts as a login check even when its function has a plain name.

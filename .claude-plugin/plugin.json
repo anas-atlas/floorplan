@@ -1,13 +1,13 @@
 {
-  "name": "floorplan",
-  "version": "0.1.5",
-  "description": "See how your app actually fits together: an interactive map of your codebase where every part, file and web request has a plain-English name and description, with a health check, screens, guided flows, questions answered on the map, and highlights of what was just worked on.",
+  "name": "atlas-floorplan",
+  "version": "0.1.5-atlas.1",
+  "description": "Atlas DevShop's build of Floorplan: an interactive map of your codebase (every part, file and web request with a plain-English name and description, a health check, screens, guided flows and recent-work highlights), plus the build map, a local page where agents keep a feature build's status and the owner answers, approves and leaves notes.",
   "author": {
-    "name": "Hayden Smith",
-    "url": "https://github.com/haydenschmitty"
+    "name": "Atlas DevShop",
+    "url": "https://github.com/anas-atlas"
   },
-  "homepage": "https://github.com/haydenschmitty/floorplan",
-  "repository": "https://github.com/haydenschmitty/floorplan",
+  "homepage": "https://github.com/anas-atlas/floorplan",
+  "repository": "https://github.com/anas-atlas/floorplan",
   "license": "MIT",
   "keywords": [
     "codebase",
@@ -16,6 +16,8 @@
     "visualization",
     "onboarding",
     "diagram",
-    "documentation"
+    "documentation",
+    "build-map",
+    "status"
   ]
 }

@@ -1,0 +1,20 @@
+{
+  "feature": "",
+  "branch": "",
+  "org": "",
+  "tickets": [],
+  "stage": "plan",
+  "updated": "",
+  "now": [],
+  "plan": { "scope": "", "decisions": [] },
+  "layers": [
+    { "name": "Trigger", "mods": [] },
+    { "name": "Service", "mods": [] },
+    { "name": "Domain", "mods": [] },
+    { "name": "Data & config", "mods": [] }
+  ],
+  "qa": [],
+  "deploy": { "checks": [], "links": [] },
+  "log": [],
+  "rev": 0
+}
